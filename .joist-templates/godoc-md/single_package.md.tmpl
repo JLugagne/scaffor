@@ -1,0 +1,31 @@
+# Package `{{ .PackageName }}`
+
+**Project:** {{ .ProjectName }}
+**Import path:** `{{ .PackagePath }}`
+
+## Overview
+
+<!-- AGENT: Run go-surgeon graph --summary --dir {{ .PackagePath }}
+     and paste the package doc comment here -->
+
+## Types
+
+<!-- AGENT: Run go-surgeon graph --symbols --dir {{ .PackagePath }}
+     For each type listed, run: go-surgeon symbol <TypeName> --body
+     Then create a section below for each -->
+
+## Functions
+
+<!-- AGENT: For each function from graph --symbols output:
+     Run: go-surgeon symbol <FuncName> --body
+     Create a section with signature + doc -->
+
+## Interfaces
+
+<!-- AGENT: For each interface from graph --symbols output:
+     Run: go-surgeon symbol <InterfaceName> --body
+     List methods and their signatures -->
+
+---
+
+*{{ .PackageName }} — part of [{{ .ProjectName }}](../index.md)*

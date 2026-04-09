@@ -1,0 +1,99 @@
+name: godoc-md
+description: |
+  Generates Markdown documentation from Go source code using go-surgeon's
+  graph and symbol commands. Demonstrates that the scaffold engine can
+  produce documentation, not just code.
+
+  This template generates a docs/ folder with:
+    - An index page listing all packages
+    - One page per package with exported symbols and signatures
+    - A navigation sidebar file
+
+  Works with any Go project. No Go compiler needed for the output —
+  it's pure Markdown, ready for GitHub, MkDocs, or any static site.
+
+commands:
+  - command: init
+    description: Generates the full documentation site in one shot
+    variables:
+      - key: ProjectName
+        description: Display name of the project (e.g. "My API")
+      - key: ModulePath
+        description: Go module path (e.g. "github.com/org/repo")
+    files:
+      - source: index.md.tmpl
+        destination: examples/godoc-md/index.md
+      - source: sidebar.md.tmpl
+        destination: examples/godoc-md/_sidebar.md
+      - source: contributing.md.tmpl
+        destination: examples/godoc-md/contributing.md
+    post_commands:
+      - gen_packages
+    hint: |
+      Documentation scaffold created at examples/godoc-md/
+
+      NEXT STEPS — run these commands to populate the docs with real content:
+
+      1. Generate the package list:
+         go-surgeon graph --summary | while read -r pkg; do
+           echo "- [$pkg](packages/$(echo $pkg | tr '/' '_').md)" >> examples/godoc-md/_sidebar.md
+         done
+
+      2. For each package, generate its doc page:
+         go-surgeon graph --symbols --dir <package_dir> 
+
+      3. For each exported symbol, pull the signature and godoc:
+         go-surgeon symbol <SymbolName> --body
+
+      These steps can be fully automated by an AI agent (Haiku is sufficient).
+      The agent reads the hint, runs the commands, and fills in the templates.
+
+  - command: gen_packages
+    description: Creates the packages directory and a template for individual package docs
+    variables:
+      - key: ProjectName
+        description: Display name of the project
+    files:
+      - source: package.md.tmpl
+        destination: examples/godoc-md/packages/_template.md
+    hint: |
+      Package doc template created at examples/godoc-md/packages/_template.md
+
+      USE THIS TEMPLATE for each package by copying it:
+        cp examples/godoc-md/packages/_template.md examples/godoc-md/packages/<package_name>.md
+
+      Then fill it using go-surgeon:
+        go-surgeon graph --symbols --dir <package_dir>
+        go-surgeon symbol <Type> --body
+        go-surgeon symbol <Receiver.Method> --body
+
+      An AI agent should:
+        1. Run: go-surgeon graph
+        2. For each package path, copy _template.md to <package>.md
+        3. Run: go-surgeon graph --symbols --dir <path>
+        4. For each symbol, run: go-surgeon symbol <name> --body
+        5. Fill the copied template with the extracted signatures and docs
+
+  - command: add_package_doc
+    description: Creates a single package documentation page
+    variables:
+      - key: ProjectName
+        description: Display name of the project
+      - key: PackageName
+        description: Name of the package to document
+      - key: PackagePath
+        description: Import path relative to module root
+    files:
+      - source: single_package.md.tmpl
+        destination: examples/godoc-md/packages/{{ .PackageName }}.md
+    hint: |
+      Package doc created at examples/godoc-md/packages/{{ .PackageName }}.md
+
+      FILL IT with real content using go-surgeon:
+        go-surgeon graph --symbols --dir {{ .PackagePath }}
+        go-surgeon symbol <each_symbol> --body
+
+      The page structure is ready. An AI agent just needs to:
+        1. Read the symbols from graph output
+        2. Query each symbol with --body
+        3. Paste signatures and doc comments into the markdown sections

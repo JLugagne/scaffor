@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Package joist — Joist</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">Joist</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#functions">Functions</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>joist</code></h1>
+      <p>Import: <code>github.com/JLugagne/joist/internal/joist</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        The joist package is the main entry point for the scaffolding tool.
+        It provides the Setup function that initializes and returns the Runner for CLI commands.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>Runner</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Runner is a function type that executes CLI commands with context and arguments.</p>
+          <pre><code>type Runner func(ctx context.Context, args []string) error</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>Setup</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Setup initializes the joist application and returns a Runner function.</p>
+          <pre><code>func Setup() Runner</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

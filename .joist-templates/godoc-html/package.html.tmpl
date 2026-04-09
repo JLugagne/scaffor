@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Package Template — {{ .ProjectName }}</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">{{ .ProjectName }}</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#functions">Functions</a></li>
+        <li><a href="#interfaces">Interfaces</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>PACKAGE_NAME</code></h1>
+      <p>Import: <code>IMPORT_PATH</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p class="placeholder">
+        <!-- AGENT: Run go-surgeon graph --summary --dir PACKAGE_DIR -->
+        Package description goes here.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+      <!-- AGENT: For each type from go-surgeon graph --symbols:
+           Create a .symbol-section div like this: -->
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TypeName</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p class="placeholder">Doc comment from go-surgeon symbol TypeName</p>
+          <pre><code>// Signature from: go-surgeon symbol TypeName --body</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+      <!-- AGENT: Same pattern as types -->
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>FuncName</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p class="placeholder">Doc comment from go-surgeon symbol FuncName</p>
+          <pre><code>// Signature from: go-surgeon symbol FuncName --body</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="interfaces">
+      <h2>Interfaces</h2>
+      <!-- AGENT: Same pattern -->
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>InterfaceName</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p class="placeholder">Doc + methods from go-surgeon symbol InterfaceName --body</p>
+          <pre><code>// Signature from: go-surgeon symbol InterfaceName --body</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

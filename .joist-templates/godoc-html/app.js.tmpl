@@ -1,0 +1,41 @@
+// {{ .ProjectName }} — Documentation Scripts
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+}
+
+// Restore theme preference
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved) {
+    document.documentElement.setAttribute('data-theme', saved);
+  }
+})();
+
+// Collapsible symbol sections
+document.addEventListener('click', function(e) {
+  const header = e.target.closest('.symbol-header');
+  if (!header) return;
+  const body = header.nextElementSibling;
+  if (body && body.classList.contains('symbol-body')) {
+    body.classList.toggle('open');
+    const arrow = header.querySelector('.arrow');
+    if (arrow) {
+      arrow.textContent = body.classList.contains('open') ? '▼' : '▶';
+    }
+  }
+});
+
+// Simple search filter for sidebar
+function filterPackages(query) {
+  const items = document.querySelectorAll('#package-list li');
+  const q = query.toLowerCase();
+  items.forEach(function(item) {
+    const text = item.textContent.toLowerCase();
+    item.style.display = text.includes(q) ? '' : 'none';
+  });
+}

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ .PackageName }} — {{ .ProjectName }}</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">{{ .ProjectName }}</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>{{ .PackageName }}</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#functions">Functions</a></li>
+        <li><a href="#interfaces">Interfaces</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">&larr; Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>{{ .PackageName }}</code></h1>
+      <p>Import: <code>{{ .PackagePath }}</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p class="placeholder">
+        <!-- AGENT: Run go-surgeon graph --summary --dir {{ .PackagePath }}
+             and replace this placeholder with the package doc comment -->
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+      <!-- AGENT: Run go-surgeon graph --symbols --dir {{ .PackagePath }}
+           For each type, create a symbol-section:
+
+           <div class="symbol-section">
+             <div class="symbol-header">
+               <h4>TYPENAME</h4>
+               <span class="arrow">▶</span>
+             </div>
+             <div class="symbol-body">
+               <p>DOC_COMMENT</p>
+               <pre><code>SIGNATURE</code></pre>
+             </div>
+           </div>
+
+           Get details with: go-surgeon symbol TYPENAME --body
+      -->
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+      <!-- AGENT: Same as types. For methods, use:
+           go-surgeon symbol Receiver.Method --body -->
+    </section>
+
+    <section id="interfaces">
+      <h2>Interfaces</h2>
+      <!-- AGENT: Same pattern.
+           go-surgeon symbol InterfaceName --body -->
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

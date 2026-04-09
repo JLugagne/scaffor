@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Joist — Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1>Joist</h1>
+      <p class="module-path">github.com/JLugagne/joist</p>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Packages</h3>
+      <ul id="package-list">
+        <li><a href="packages/joist.html">github.com/JLugagne/joist</a></li>
+        <li><a href="packages/domain.html">internal/joist/domain</a></li>
+        <li><a href="packages/repositories.html">internal/joist/domain/repositories/filesystem</a></li>
+        <li><a href="packages/service.html">internal/joist/domain/service</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1>Joist</h1>
+      <p>Module: <code>github.com/JLugagne/joist</code></p>
+    </header>
+
+    <section class="overview">
+      <h2>Package Overview</h2>
+      <div class="package-grid" id="package-grid">
+        <div class="package-card">
+          <h3><a href="packages/joist.html">joist</a></h3>
+          <p class="package-path">github.com/JLugagne/joist</p>
+          <p>Main entry point for the Joist scaffolding tool.</p>
+        </div>
+        <div class="package-card">
+          <h3><a href="packages/domain.html">domain</a></h3>
+          <p class="package-path">internal/joist/domain</p>
+          <p>Core domain types including Template, TemplateCommand, and validation logic.</p>
+        </div>
+        <div class="package-card">
+          <h3><a href="packages/repositories.html">repositories/filesystem</a></h3>
+          <p class="package-path">internal/joist/domain/repositories/filesystem</p>
+          <p>File system abstraction for reading and writing template files.</p>
+        </div>
+        <div class="package-card">
+          <h3><a href="packages/service.html">service</a></h3>
+          <p class="package-path">internal/joist/domain/service</p>
+          <p>Scaffolder service interface for template execution.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="quick-stats">
+      <h2>Project Structure</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-number">8</span>
+          <span class="stat-label">Packages</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">7</span>
+          <span class="stat-label">Exported Types</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">2</span>
+          <span class="stat-label">Functions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">3</span>
+          <span class="stat-label">Interfaces</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

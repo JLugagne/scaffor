@@ -25,15 +25,15 @@ commands:
         description: Hex accent color for the theme (e.g. "4f46e5")
     files:
       - source: index.html.tmpl
-        destination: docs-html/index.html
+        destination: examples/godoc-html/index.html
       - source: style.css.tmpl
-        destination: docs-html/style.css
+        destination: examples/godoc-html/style.css
       - source: app.js.tmpl
-        destination: docs-html/app.js
+        destination: examples/godoc-html/app.js
     post_commands:
       - gen_package_page
     hint: |
-      HTML documentation site created at docs-html/
+      HTML documentation site created at examples/godoc-html/
 
       NEXT STEPS for an AI agent:
 
@@ -46,7 +46,7 @@ commands:
       3. For each symbol, get full details:
          go-surgeon symbol <Name> --body
 
-      4. Insert the extracted data into docs-html/index.html:
+      4. Insert the extracted data into examples/godoc-html/index.html:
          - Add packages to the sidebar nav
          - Add symbol sections to the main content
          - Fill code blocks with signatures from symbol output
@@ -62,9 +62,9 @@ commands:
         description: Hex accent color
     files:
       - source: package.html.tmpl
-        destination: docs-html/packages/_template.html
+        destination: examples/godoc-html/packages/_template.html
     hint: |
-      Package page template created at docs-html/packages/_template.html
+      Package page template created at examples/godoc-html/packages/_template.html
 
       For each package, an AI agent should:
         1. Copy _template.html to <package_name>.html
@@ -86,9 +86,9 @@ commands:
         description: Hex accent color
     files:
       - source: single_package.html.tmpl
-        destination: docs-html/packages/{{ .PackageName }}.html
+        destination: examples/godoc-html/packages/{{ .PackageName }}.html
     hint: |
-      Package page created at docs-html/packages/{{ .PackageName }}.html
+      Package page created at examples/godoc-html/packages/{{ .PackageName }}.html
 
       FILL IT using go-surgeon:
         go-surgeon graph --symbols --dir {{ .PackagePath }}

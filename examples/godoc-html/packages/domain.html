@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Package domain — Joist</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">Joist</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#interfaces">Interfaces</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>domain</code></h1>
+      <p>Import: <code>github.com/JLugagne/joist/internal/joist/domain</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        The domain package contains the core types and entities for the Joist scaffolding tool.
+        It defines templates, commands, variables, and validation logic.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>Template</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Template represents a scaffolding template with its metadata and commands.</p>
+          <pre><code>type Template struct {
+	Name          string
+	Description   string
+	Commands      []TemplateCommand
+	ShellCommands []ShellCommand
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TemplateCommand</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TemplateCommand defines a single command within a template.</p>
+          <pre><code>type TemplateCommand struct {
+	Command      string
+	Description  string
+	Variables    []TemplateVariable
+	Files        []TemplateFile
+	PostCommands []string
+	Hint         string
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TemplateVariable</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TemplateVariable represents a variable that can be set during template execution.</p>
+          <pre><code>type TemplateVariable struct {
+	Key         string
+	Description string
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TemplateFile</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TemplateFile specifies a file to be created from a template.</p>
+          <pre><code>type TemplateFile struct {
+	Source      string
+	Destination string
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>LintError</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>LintError represents a validation error found in a template manifest.</p>
+          <pre><code>type LintError struct {
+	Command string
+	Field   string
+	Message string
+}
+
+func (e LintError) Error() string</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>ShellCommand</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ShellCommand represents a shell command to run after template execution.</p>
+          <pre><code>type ShellCommand struct {
+	Command string
+	Mode    string
+}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="interfaces">
+      <h2>Interfaces</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>FileSystem</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>FileSystem is an abstraction for file system operations.</p>
+          <pre><code>type FileSystem interface {
+	ReadFile
+	WriteFile
+	MkdirAll
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>ScaffolderCommands</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ScaffolderCommands defines the interface for scaffolder operations.</p>
+          <pre><code>type ScaffolderCommands interface {
+	ListTemplates
+	GetTemplate
+	Execute
+	Lint
+}</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

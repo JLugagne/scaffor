@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ .ProjectName }} — Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1>{{ .ProjectName }}</h1>
+      <p class="module-path">{{ .ModulePath }}</p>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Packages</h3>
+      <ul id="package-list">
+        <!-- AGENT: Populate by running:
+             go-surgeon graph
+             For each package, add:
+             <li><a href="packages/PKG_NAME.html">package/path</a></li>
+        -->
+        <li class="placeholder">Run go-surgeon graph to populate</li>
+      </ul>
+    </div>
+
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1>{{ .ProjectName }}</h1>
+      <p>Module: <code>{{ .ModulePath }}</code></p>
+    </header>
+
+    <section class="overview">
+      <h2>Package Overview</h2>
+      <!-- AGENT: Run go-surgeon graph --summary
+           Create a <div class="package-card"> for each package -->
+      <div class="package-grid" id="package-grid">
+        <div class="package-card placeholder">
+          <h3>Waiting for content</h3>
+          <p>Use <code>go-surgeon graph --summary</code> to discover packages,
+             then fill this grid.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="quick-stats">
+      <h2>Project Structure</h2>
+      <!-- AGENT: Run go-surgeon graph --summary --deps
+           Fill in the counts below -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-number">—</span>
+          <span class="stat-label">Packages</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">—</span>
+          <span class="stat-label">Exported Types</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">—</span>
+          <span class="stat-label">Functions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">—</span>
+          <span class="stat-label">Interfaces</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
