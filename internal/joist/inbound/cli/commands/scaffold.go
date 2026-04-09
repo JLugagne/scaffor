@@ -19,7 +19,7 @@ Each template is a YAML manifest (manifest.yaml) inside its own subdirectory.
 The output shows each template's name and description so you can decide which
 one fits your use case, then explore it further with "joist doc <template>".`,
 		Example: `  # Show all templates in this project
-  joist scaffold list`,
+  joist list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			templates, err := scaffolder.ListTemplates(ctx)

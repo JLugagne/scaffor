@@ -40,12 +40,12 @@ joist completion zsh > "${fpath[1]}/_joist"             # zsh
 ### Usage Overview
 ```bash
 # List scaffolding templates, lint, and read documentation
-joist scaffold list
-joist scaffold lint hexagonal
-joist scaffold doc hexagonal bootstrap
+joist list
+joist lint hexagonal
+joist doc hexagonal bootstrap
 
 # Execute a scaffolding workflow
-joist scaffold execute hexagonal bootstrap --set AppName=catalog
+joist execute hexagonal bootstrap --set AppName=catalog
 ```
 
 See `USAGE.md` for detailed documentation on all commands and flags.
@@ -84,7 +84,7 @@ commands:
       - command: go fmt ./...
         mode: all
     hint: |
-      Project bootstrapped. Run: joist scaffold execute hexagonal add_domain --set AppName={{ .AppName }}
+      Project bootstrapped. Run: joist execute hexagonal add_domain --set AppName={{ .AppName }}
 
   - command: add_domain
     description: Creates the domain layer
@@ -118,7 +118,7 @@ commands:
 Before executing a template, validate it with `lint`:
 
 ```bash
-joist scaffold lint hexagonal
+joist lint hexagonal
 ```
 
 This checks:
@@ -140,15 +140,15 @@ Run with --run-commands to execute them automatically.
 Pass `--run-commands` to execute them automatically via the shell:
 
 ```bash
-joist scaffold execute hexagonal bootstrap --set AppName=catalog --run-commands
+joist execute hexagonal bootstrap --set AppName=catalog --run-commands
 ```
 
 ### Best practices for AI agents
 
 1. **One command per concern:** Define small, composable commands (`add_repository`, `add_usecase`, `add_handler`) rather than one massive generator. The agent chains them; joist chains the files.
-2. **Use hints as a task queue:** Write `hint` as an ordered list of `joist scaffold execute` commands the agent should run next. The agent reads the hint output and acts on it — no planning required.
+2. **Use hints as a task queue:** Write `hint` as an ordered list of `joist execute` commands the agent should run next. The agent reads the hint output and acts on it — no planning required.
 3. **Never ask the LLM to write boilerplate:** if a file is structural (main.go, Makefile, CI config), put it in a template. Reserve the LLM for files that require actual reasoning.
-4. **Lint in CI:** Run `joist scaffold lint <template>` in your pipeline so broken templates never reach the agent.
+4. **Lint in CI:** Run `joist lint <template>` in your pipeline so broken templates never reach the agent.
 
 ## Examples
 

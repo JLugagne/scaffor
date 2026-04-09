@@ -14,55 +14,55 @@ Templates are stored in `.joist-templates/<template-name>/manifest.yaml`. See `R
 
 ```bash
 # List all available templates
-joist scaffold list
+joist list
 
 # Lint a template manifest for issues before executing
-joist scaffold lint <template>
+joist lint <template>
 
 # Show documentation for a template (lists all its commands)
-joist scaffold doc <template>
+joist doc <template>
 
 # Show documentation for a specific command (shows required variables and post_commands)
-joist scaffold doc <template> <command>
+joist doc <template> <command>
 
 # Execute a command (post_commands are printed for manual review)
-joist scaffold execute <template> <command> [--set Key=Value ...]
+joist execute <template> <command> [--set Key=Value ...]
 
 # Execute a command and run post_commands automatically via shell
-joist scaffold execute <template> <command> [--set Key=Value ...] --run-commands
+joist execute <template> <command> [--set Key=Value ...] --run-commands
 ```
 
 **Examples:**
 ```bash
 # See what templates are available
-joist scaffold list
+joist list
 
 # Validate the 'hexagonal' template before running it
-joist scaffold lint hexagonal
+joist lint hexagonal
 
 # Read what the 'bootstrap' command does
-joist scaffold doc hexagonal bootstrap
+joist doc hexagonal bootstrap
 
 # Execute it, passing the required variables
-joist scaffold execute hexagonal bootstrap --set AppName=catalog --set ModulePath=github.com/myorg/myapp
+joist execute hexagonal bootstrap --set AppName=catalog --set ModulePath=github.com/myorg/myapp
 
 # Execute and run post_commands automatically
-joist scaffold execute hexagonal bootstrap --set AppName=catalog --run-commands
+joist execute hexagonal bootstrap --set AppName=catalog --run-commands
 ```
 
 ### Lint
 
-`joist scaffold lint <template>` validates a template manifest and reports all issues found:
+`joist lint <template>` validates a template manifest and reports all issues found:
 
 - **Invalid post_commands** — a post_command has an empty `command` or an invalid `mode` (must be `"all"` or `"per-file"`)
 - **Undeclared variables in destination paths** — `{{ .Foo }}` used in a `files.destination` but `Foo` is not in the command's `variables` list
 - **Undeclared variables in source templates** — `{{ .Foo }}` used inside a template file but `Foo` is not declared
 
 ```
-$ joist scaffold lint hexagonal
+$ joist lint hexagonal
 OK: hexagonal has no issues
 
-$ joist scaffold lint broken-template
+$ joist lint broken-template
 LINT ERRORS in broken-template:
 
   command "create", field "post_commands": post_command[0] has an empty command
@@ -130,7 +130,7 @@ commands:
         mode: all        # or "per-file"
     hint: |
       Message printed after execution. Rendered as a template.
-      Next: run joist scaffold execute <template> next-command --set AppName={{ .AppName }}
+      Next: run joist execute <template> next-command --set AppName={{ .AppName }}
 ```
 
 ### Template functions
@@ -143,8 +143,8 @@ commands:
 
 ### Best practices for AI agents
 
-1. **Always lint first:** `joist scaffold lint <template>` before executing
-2. **Read doc before execute:** `joist scaffold doc <template> <command>` shows required variables
+1. **Always lint first:** `joist lint <template>` before executing
+2. **Read doc before execute:** `joist doc <template> <command>` shows required variables
 3. **Follow hints:** After execution, hints tell you what to do next — read them carefully
 4. **Granular commands:** Prefer many small commands over one large generator
 5. **Safety:** Pre-flight checks abort if any destination file already exists

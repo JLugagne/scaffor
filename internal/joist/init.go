@@ -27,7 +27,7 @@ Each template is a YAML manifest that defines commands, variables, and file
 transformations to scaffold new components from existing patterns.
 
 Typical workflow:
-  1. List available templates:      joist scaffold list
+  1. List available templates:      joist list
   2. Read a template's docs:        joist doc <template>
   3. See a specific command's vars: joist doc <template> <command>
   4. Execute a template command:    joist execute <template> <command> --set Key=Value

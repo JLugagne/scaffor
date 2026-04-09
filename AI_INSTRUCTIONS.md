@@ -15,35 +15,35 @@ You are working in a project that uses `joist` for template-driven scaffolding. 
 
 Always start by listing available templates:
 ```bash
-joist scaffold list
+joist list
 ```
 
 Read the documentation for a template before executing it:
 ```bash
 # All commands in a template
-joist scaffold doc <template_name>
+joist doc <template_name>
 
 # Specific command (shows required variables and post_commands)
-joist scaffold doc <template_name> <command_name>
+joist doc <template_name> <command_name>
 ```
 
 ## 2. Linting Before Executing
 
 Always lint a template before running it:
 ```bash
-joist scaffold lint <template_name>
+joist lint <template_name>
 ```
 
 ## 3. Executing Scaffolding
 
 ```bash
-joist scaffold execute <template> <command> --set Key=Value [--set Key2=Value2 ...]
+joist execute <template> <command> --set Key=Value [--set Key2=Value2 ...]
 ```
 
 Example:
 ```bash
-joist scaffold doc hexagonal bootstrap
-joist scaffold execute hexagonal bootstrap \
+joist doc hexagonal bootstrap
+joist execute hexagonal bootstrap \
   --set AppName=catalog \
   --set ModulePath=github.com/myorg/myapp
 ```
@@ -78,12 +78,12 @@ When asked to create new files or project structure:
    NO  → Create files manually
    YES → Continue
 
-3. Run: joist scaffold list
+3. Run: joist list
    Templates exist for this task?
    NO  → Create files manually (or create a new template if the pattern is reusable)
    YES → Continue
 
-4. Run: joist scaffold doc <template> <command>
+4. Run: joist doc <template> <command>
    Command matches the need?
    YES → Lint, execute, and follow hints
    NO  → Create files manually or add a new command to the template
