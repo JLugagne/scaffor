@@ -13,6 +13,13 @@ func NewListTemplatesCommand(scaffolder service.ScaffolderCommands) *cobra.Comma
 	return &cobra.Command{
 		Use:   "list-templates",
 		Short: "List all available scaffolding templates",
+		Long: `List all templates found in the .joist-templates/ directory.
+
+Each template is a YAML manifest (manifest.yaml) inside its own subdirectory.
+The output shows each template's name and description so you can decide which
+one fits your use case, then explore it further with "joist doc <template>".`,
+		Example: `  # Show all templates in this project
+  joist list-templates`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			templates, err := scaffolder.ListTemplates(ctx)
@@ -44,7 +51,20 @@ func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doc <template> [command]",
 		Short: "Show documentation for a template or specific command",
-		Args:  cobra.RangeArgs(1, 2),
+		Long: `Show documentation for a template or one of its commands.
+
+When called with only a template name, lists all commands the template exposes
+along with their descriptions.
+
+When called with a template name and a command name, shows the full details for
+that command: its description, the chain of post-commands it will trigger, and
+every variable you must supply via --set when running "joist execute".`,
+		Example: `  # List all commands in the "service" template
+  joist doc service
+
+  # Show variables required by the "create" command in the "service" template
+  joist doc service create`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			tmpl, err := scaffolder.GetTemplate(ctx, args[0])
@@ -107,7 +127,7 @@ func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 			walk(commandName)
 
 			if len(executionPath) > 1 {
-				fmt.Printf("  Executes: %s\n\n", strings.Join(executionPath, " \u2192 "))
+				fmt.Printf("  Executes: %s\n\n", strings.Join(executionPath, " → "))
 			}
 
 			if len(variables) > 0 {
@@ -130,7 +150,22 @@ func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "execute <template> <command> [--set Key=Value ...]",
 		Short: "Execute a template command",
-		Args:  cobra.ExactArgs(2),
+		Long: `Execute a command defined in a template manifest.
+
+A template command copies and renders files, substituting any declared variables
+with the values you supply via --set.  If a command declares post_commands, those
+run automatically in sequence after the primary command completes.
+
+To discover available templates and commands run:
+  joist list-templates
+  joist doc <template>
+  joist doc <template> <command>   # shows every required --set variable`,
+		Example: `  # Scaffold a new service named "catalog" using the "service" template
+  joist execute service create --set Name=catalog
+
+  # Multiple variables
+  joist execute service create --set Name=catalog --set Port=8080`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			templateName := args[0]
@@ -208,7 +243,7 @@ func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringSliceVar(&sets, "set", nil, "Set variable values (e.g. AppName=catalog)")
+	cmd.Flags().StringSliceVar(&sets, "set", nil, "Set a variable value (format: Key=Value). Repeat for multiple variables.")
 	return cmd
 }
 
@@ -217,7 +252,15 @@ func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lint <template>",
 		Short: "Lint a template manifest for issues",
-		Args:  cobra.ExactArgs(1),
+		Long: `Validate a template manifest and report any issues.
+
+Checks include:
+  - Variables declared in commands actually exist
+  - post_commands reference commands that exist in the same template
+  - Required fields are present and non-empty`,
+		Example: `  # Lint the "service" template
+  joist lint service`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			templateName := args[0]
