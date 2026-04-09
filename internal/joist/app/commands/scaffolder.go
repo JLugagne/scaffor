@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -66,58 +67,7 @@ func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string
 	if tmpl.Name == "" {
 		tmpl.Name = templateName
 	}
-
-	// Validate DAG for post_commands
-	if err := h.validateDAG(tmpl); err != nil {
-		return tmpl, fmt.Errorf("invalid manifest %q: %w", tmpl.Name, err)
-	}
-
 	return tmpl, nil
-}
-
-func (h *ScaffolderHandler) validateDAG(tmpl domain.Template) error {
-	cmdMap := make(map[string]domain.TemplateCommand)
-	for _, c := range tmpl.Commands {
-		cmdMap[c.Command] = c
-	}
-
-	var checkCycles func(cmdName string, visited, recursionStack map[string]bool, path []string) error
-	checkCycles = func(cmdName string, visited, recursionStack map[string]bool, path []string) error {
-		if recursionStack[cmdName] {
-			cycle := append(path, cmdName)
-			return fmt.Errorf("cycle detected in post_commands: %s", strings.Join(cycle, " -> "))
-		}
-		if visited[cmdName] {
-			return nil
-		}
-
-		visited[cmdName] = true
-		recursionStack[cmdName] = true
-		path = append(path, cmdName)
-
-		cmd, ok := cmdMap[cmdName]
-		if !ok {
-			return fmt.Errorf("reference to undefined command %q in post_commands", cmdName)
-		}
-
-		for _, postCmd := range cmd.PostCommands {
-			if err := checkCycles(postCmd, visited, recursionStack, path); err != nil {
-				return err
-			}
-		}
-
-		recursionStack[cmdName] = false
-		return nil
-	}
-
-	for _, c := range tmpl.Commands {
-		visited := make(map[string]bool)
-		recursionStack := make(map[string]bool)
-		if err := checkCycles(c.Command, visited, recursionStack, []string{}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func getFuncMap() template.FuncMap {
@@ -129,7 +79,9 @@ func getFuncMap() template.FuncMap {
 }
 
 // Execute performs the scaffolding with dedup and hint aggregation.
-func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string) error {
+// After files are written, post_commands are resolved and either printed
+// (for the LLM/user to run manually) or executed directly when runCommands is true.
+func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string, runCommands bool) error {
 	tmpl, err := h.GetTemplate(ctx, templateName)
 	if err != nil {
 		return err
@@ -156,6 +108,13 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	var hints []string
 
 	funcMap := getFuncMap()
+
+	// postCmds accumulates resolved shell commands in order (mode + rendered string).
+	type resolvedCmd struct {
+		mode    string // "all" or "per-file"
+		command string
+	}
+	var postCmds []resolvedCmd
 
 	var executeNode func(cmdName string) error
 	executeNode = func(cmdName string) error {
@@ -221,29 +180,28 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 		executedCommands = append(executedCommands, cmdName)
 
-		for _, postCmd := range cmd.PostCommands {
-			if err := executeNode(postCmd); err != nil {
-				return err
+		// Collect post_commands (resolved against params, files resolved later)
+		for _, pc := range cmd.PostCommands {
+			cmdTmpl, err := template.New("postcmd").Funcs(funcMap).Parse(pc.Command)
+			if err != nil {
+				return fmt.Errorf("failed to parse post_command template %q: %w", pc.Command, err)
 			}
+			var cmdBuf bytes.Buffer
+			if err := cmdTmpl.Execute(&cmdBuf, params); err != nil {
+				return fmt.Errorf("failed to render post_command template %q: %w", pc.Command, err)
+			}
+			mode := pc.Mode
+			if mode == "" {
+				mode = "all"
+			}
+			postCmds = append(postCmds, resolvedCmd{mode: mode, command: cmdBuf.String()})
 		}
+
 		return nil
 	}
 
 	if err := executeNode(commandName); err != nil {
 		return err
-	}
-
-	// Format files
-	var goFiles []string
-	for _, f := range createdFiles {
-		if strings.HasSuffix(f, ".go") {
-			goFiles = append(goFiles, f)
-		}
-	}
-	if len(goFiles) > 0 {
-		if err := h.fs.ExecuteGoImports(ctx, goFiles); err != nil {
-			return err
-		}
 	}
 
 	// Output summary
@@ -257,6 +215,68 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		fmt.Println(hint)
 	}
 	fmt.Printf("SUCCESS: Executed %s/%s (%d commands, %d skipped)\n", templateName, commandName, len(executedCommands), skippedCount)
+
+	if len(postCmds) == 0 {
+		return nil
+	}
+
+	// Resolve per-file and all-files variants of each post_command.
+	// {{ .Files }} → space-joined list of all created files
+	// {{ .File }} → individual file (per-file mode only)
+	allFilesStr := strings.Join(createdFiles, " ")
+
+	type shellCmd struct {
+		rendered string
+	}
+	var toRun []shellCmd
+
+	for _, pc := range postCmds {
+		switch pc.mode {
+		case "per-file":
+			for _, f := range createdFiles {
+				data := map[string]string{"File": f, "Files": allFilesStr}
+				t, err := template.New("pcfile").Funcs(funcMap).Parse(pc.command)
+				if err != nil {
+					return fmt.Errorf("failed to parse per-file post_command %q: %w", pc.command, err)
+				}
+				var buf bytes.Buffer
+				if err := t.Execute(&buf, data); err != nil {
+					return fmt.Errorf("failed to render per-file post_command %q: %w", pc.command, err)
+				}
+				toRun = append(toRun, shellCmd{rendered: buf.String()})
+			}
+		default: // "all"
+			data := map[string]string{"Files": allFilesStr}
+			t, err := template.New("pcall").Funcs(funcMap).Parse(pc.command)
+			if err != nil {
+				return fmt.Errorf("failed to parse post_command %q: %w", pc.command, err)
+			}
+			var buf bytes.Buffer
+			if err := t.Execute(&buf, data); err != nil {
+				return fmt.Errorf("failed to render post_command %q: %w", pc.command, err)
+			}
+			toRun = append(toRun, shellCmd{rendered: buf.String()})
+		}
+	}
+
+	if runCommands {
+		fmt.Printf("\nRunning post-commands:\n")
+		for _, sc := range toRun {
+			fmt.Printf("  $ %s\n", sc.rendered)
+			cmd := exec.CommandContext(ctx, "sh", "-c", sc.rendered)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("post_command %q failed: %w", sc.rendered, err)
+			}
+		}
+	} else {
+		fmt.Printf("\nPost-commands to run:\n")
+		for _, sc := range toRun {
+			fmt.Printf("  %s\n", sc.rendered)
+		}
+		fmt.Printf("\nRun with --run-commands to execute them automatically.\n")
+	}
 
 	return nil
 }
@@ -292,11 +312,6 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 			}
 		}
 
-		for _, postCmd := range cmd.PostCommands {
-			if err := walk(postCmd); err != nil {
-				return err
-			}
-		}
 		return nil
 	}
 
@@ -307,7 +322,7 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 // It checks:
 //   - all declared variable keys start with a capital letter (required by text/template)
 //   - all variables referenced in destination paths and template file sources are declared
-//   - all post_commands reference existing commands
+//   - all post_commands have a non-empty command and a valid mode ("all" or "per-file")
 //
 // When an undeclared variable is found, it suggests the closest declared variable
 // by Levenshtein distance if one is within a reasonable edit distance.
@@ -324,11 +339,6 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 	}
 	if tmpl.Name == "" {
 		tmpl.Name = templateName
-	}
-
-	cmdMap := make(map[string]domain.TemplateCommand)
-	for _, c := range tmpl.Commands {
-		cmdMap[c.Command] = c
 	}
 
 	var errs []domain.LintError
@@ -348,13 +358,20 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 			}
 		}
 
-		// Check post_commands reference existing commands
-		for _, pc := range cmd.PostCommands {
-			if _, ok := cmdMap[pc]; !ok {
+		// Validate post_commands
+		for i, pc := range cmd.PostCommands {
+			if pc.Command == "" {
 				errs = append(errs, domain.LintError{
 					Command: cmd.Command,
 					Field:   "post_commands",
-					Message: fmt.Sprintf("references undefined command %q", pc),
+					Message: fmt.Sprintf("post_command[%d] has an empty command", i),
+				})
+			}
+			if pc.Mode != "" && pc.Mode != "all" && pc.Mode != "per-file" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "post_commands",
+					Message: fmt.Sprintf("post_command[%d] has invalid mode %q (must be \"all\" or \"per-file\")", i, pc.Mode),
 				})
 			}
 		}

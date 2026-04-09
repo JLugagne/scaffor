@@ -57,8 +57,8 @@ When called with only a template name, lists all commands the template exposes
 along with their descriptions.
 
 When called with a template name and a command name, shows the full details for
-that command: its description, the chain of post-commands it will trigger, and
-every variable you must supply via --set when running "joist execute".`,
+that command: its description, the variables you must supply via --set, and
+the post_commands that will run after scaffolding.`,
 		Example: `  # List all commands in the "service" template
   joist doc service
 
@@ -97,46 +97,24 @@ every variable you must supply via --set when running "joist execute".`,
 			fmt.Printf("Command: %s\n", targetCmd.Command)
 			fmt.Printf("  %s\n\n", targetCmd.Description)
 
-			// Tree walk for deduplicated variables and execution path
-			var executionPath []string
-			visited := make(map[string]bool)
-			var variables []domain.TemplateVariable
-			varKeys := make(map[string]bool)
-
-			var walk func(cmdName string)
-			walk = func(cmdName string) {
-				if visited[cmdName] {
-					return
-				}
-				visited[cmdName] = true
-				executionPath = append(executionPath, cmdName)
-
-				c := cmdMap[cmdName]
-				for _, v := range c.Variables {
-					if !varKeys[v.Key] {
-						varKeys[v.Key] = true
-						variables = append(variables, v)
-					}
-				}
-
-				for _, postCmd := range c.PostCommands {
-					walk(postCmd)
-				}
-			}
-
-			walk(commandName)
-
-			if len(executionPath) > 1 {
-				fmt.Printf("  Executes: %s\n\n", strings.Join(executionPath, " → "))
-			}
-
-			if len(variables) > 0 {
-				fmt.Println("  Variables (all commands, deduplicated):")
-				for _, v := range variables {
+			if len(targetCmd.Variables) > 0 {
+				fmt.Println("  Variables:")
+				for _, v := range targetCmd.Variables {
 					fmt.Printf("    --set %s\t%s\n", v.Key, v.Description)
 				}
 			} else {
 				fmt.Println("  Variables: None")
+			}
+
+			if len(targetCmd.PostCommands) > 0 {
+				fmt.Println("\n  Post-commands (run after scaffolding):")
+				for _, pc := range targetCmd.PostCommands {
+					mode := pc.Mode
+					if mode == "" {
+						mode = "all"
+					}
+					fmt.Printf("    [%s] %s\n", mode, pc.Command)
+				}
 			}
 
 			return nil
@@ -146,6 +124,7 @@ every variable you must supply via --set when running "joist execute".`,
 
 func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 	var sets []string
+	var runCommands bool
 
 	cmd := &cobra.Command{
 		Use:   "execute <template> <command> [--set Key=Value ...]",
@@ -153,18 +132,23 @@ func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 		Long: `Execute a command defined in a template manifest.
 
 A template command copies and renders files, substituting any declared variables
-with the values you supply via --set.  If a command declares post_commands, those
-run automatically in sequence after the primary command completes.
+with the values you supply via --set.
 
-To discover available templates and commands run:
-  joist list-templates
-  joist doc <template>
-  joist doc <template> <command>   # shows every required --set variable`,
+After files are written, post_commands defined in the manifest are displayed
+so that you (or your LLM) can run them. Pass --run-commands to execute them
+automatically via the shell instead.
+
+Post-commands support two modes:
+  all      – run once with {{ .Files }} expanded to all created files (default)
+  per-file – run once per created file with {{ .File }} expanded to each path`,
 		Example: `  # Scaffold a new service named "catalog" using the "service" template
   joist execute service create --set Name=catalog
 
   # Multiple variables
-  joist execute service create --set Name=catalog --set Port=8080`,
+  joist execute service create --set Name=catalog --set Port=8080
+
+  # Run post-commands automatically
+  joist execute service create --set Name=catalog --run-commands`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -185,32 +169,7 @@ To discover available templates and commands run:
 				return fmt.Errorf("command '%s' not found in template '%s'", commandName, templateName)
 			}
 
-			// Tree walk for deduplicated variables and execution path
-			visited := make(map[string]bool)
-			var variables []domain.TemplateVariable
-			varKeys := make(map[string]bool)
-
-			var walk func(cmdName string)
-			walk = func(cmdName string) {
-				if visited[cmdName] {
-					return
-				}
-				visited[cmdName] = true
-				c := cmdMap[cmdName]
-				for _, v := range c.Variables {
-					if !varKeys[v.Key] {
-						varKeys[v.Key] = true
-						variables = append(variables, v)
-					}
-				}
-
-				for _, postCmd := range c.PostCommands {
-					walk(postCmd)
-				}
-			}
-
-			walk(commandName)
-
+			targetCmd := cmdMap[commandName]
 			params := make(map[string]string)
 			for _, set := range sets {
 				parts := strings.SplitN(set, "=", 2)
@@ -220,7 +179,7 @@ To discover available templates and commands run:
 			}
 
 			var missing []domain.TemplateVariable
-			for _, v := range variables {
+			for _, v := range targetCmd.Variables {
 				if _, ok := params[v.Key]; !ok {
 					missing = append(missing, v)
 				}
@@ -232,18 +191,19 @@ To discover available templates and commands run:
 					fmt.Printf("  --set %s\t%s\n", v.Key, v.Description)
 				}
 				fmt.Printf("\nUsage: joist execute %s %s", templateName, commandName)
-				for _, v := range variables {
+				for _, v := range targetCmd.Variables {
 					fmt.Printf(" --set %s=\"value\"", v.Key)
 				}
 				fmt.Println()
 				return fmt.Errorf("missing required variables")
 			}
 
-			return scaffolder.Execute(ctx, templateName, commandName, params)
+			return scaffolder.Execute(ctx, templateName, commandName, params, runCommands)
 		},
 	}
 
 	cmd.Flags().StringSliceVar(&sets, "set", nil, "Set a variable value (format: Key=Value). Repeat for multiple variables.")
+	cmd.Flags().BoolVar(&runCommands, "run-commands", false, "Execute post_commands automatically via the shell instead of printing them.")
 	return cmd
 }
 

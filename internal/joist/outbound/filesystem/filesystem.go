@@ -3,7 +3,6 @@ package filesystem
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 
 	"golang.org/x/tools/imports"
@@ -36,15 +35,4 @@ func (f *FileSystem) WriteFile(ctx context.Context, path string, content []byte)
 // MkdirAll creates a directory and all necessary parents.
 func (f *FileSystem) MkdirAll(ctx context.Context, path string) error {
 	return os.MkdirAll(path, 0755)
-}
-
-// ExecuteGoImports executes goimports -w on the provided files.
-func (f *FileSystem) ExecuteGoImports(ctx context.Context, files []string) error {
-	if len(files) == 0 {
-		return nil
-	}
-
-	args := append([]string{"-w"}, files...)
-	cmd := exec.CommandContext(ctx, "goimports", args...)
-	return cmd.Run()
 }

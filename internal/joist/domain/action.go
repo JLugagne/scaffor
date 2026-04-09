@@ -13,7 +13,7 @@ type TemplateCommand struct {
 	Description  string             `yaml:"description"`
 	Variables    []TemplateVariable `yaml:"variables"`
 	Files        []TemplateFile     `yaml:"files"`
-	PostCommands []string           `yaml:"post_commands"`
+	PostCommands []PostCommand      `yaml:"post_commands"`
 	Hint         string             `yaml:"hint"`
 }
 
@@ -40,4 +40,12 @@ func (e LintError) Error() string {
 		return fmt.Sprintf("command %q, field %q: %s", e.Command, e.Field, e.Message)
 	}
 	return fmt.Sprintf("field %q: %s", e.Field, e.Message)
+}
+
+// PostCommand is a shell command to run after scaffolding files are written.
+// Mode "all" runs the command once with all created files ({{ .Files }}).
+// Mode "per-file" runs the command once per created file ({{ .File }}).
+type PostCommand struct {
+	Command string `yaml:"command"`
+	Mode    string `yaml:"mode"` // "all" or "per-file"
 }
