@@ -15,7 +15,7 @@ You are working in a project that uses `joist` for template-driven scaffolding. 
 
 Always start by listing available templates:
 ```bash
-joist scaffold list-templates
+joist scaffold list
 ```
 
 Read the documentation for a template before executing it:
@@ -78,7 +78,7 @@ When asked to create new files or project structure:
    NO  → Create files manually
    YES → Continue
 
-3. Run: joist scaffold list-templates
+3. Run: joist scaffold list
    Templates exist for this task?
    NO  → Create files manually (or create a new template if the pattern is reusable)
    YES → Continue

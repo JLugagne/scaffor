@@ -14,7 +14,7 @@ Templates are stored in `.joist-templates/<template-name>/manifest.yaml`. See `R
 
 ```bash
 # List all available templates
-joist scaffold list-templates
+joist scaffold list
 
 # Lint a template manifest for issues before executing
 joist scaffold lint <template>
@@ -35,7 +35,7 @@ joist scaffold execute <template> <command> [--set Key=Value ...] --run-commands
 **Examples:**
 ```bash
 # See what templates are available
-joist scaffold list-templates
+joist scaffold list
 
 # Validate the 'hexagonal' template before running it
 joist scaffold lint hexagonal

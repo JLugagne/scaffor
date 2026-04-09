@@ -30,7 +30,7 @@ joist completion zsh > "${fpath[1]}/_joist"             # zsh
 ### Usage Overview
 ```bash
 # List scaffolding templates, lint, and read documentation
-joist scaffold list-templates
+joist scaffold list
 joist scaffold lint hexagonal
 joist scaffold doc hexagonal bootstrap
 
