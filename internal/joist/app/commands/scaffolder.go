@@ -53,7 +53,6 @@ func (h *ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Templat
 	return templates, nil
 }
 
-// GetTemplate reads and validates a template manifest.
 func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string) (domain.Template, error) {
 	var tmpl domain.Template
 	path := filepath.Join(".joist-templates", templateName, "manifest.yaml")
@@ -66,6 +65,9 @@ func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string
 	}
 	if tmpl.Name == "" {
 		tmpl.Name = templateName
+	}
+	if err := detectPostCommandCycle(tmpl); err != nil {
+		return tmpl, err
 	}
 	return tmpl, nil
 }
@@ -557,4 +559,37 @@ func closestVar(name string, declared map[string]bool) (string, int) {
 		}
 	}
 	return best, bestDist
+}
+
+func detectPostCommandCycle(tmpl domain.Template) error {
+	adj := make(map[string][]string, len(tmpl.Commands))
+	for _, c := range tmpl.Commands {
+		adj[c.Command] = c.PostCommands
+	}
+	visited := make(map[string]bool)
+	inStack := make(map[string]bool)
+	var dfs func(node string) bool
+	dfs = func(node string) bool {
+		visited[node] = true
+		inStack[node] = true
+		for _, next := range adj[node] {
+			if !visited[next] {
+				if dfs(next) {
+					return true
+				}
+			} else if inStack[next] {
+				return true
+			}
+		}
+		inStack[node] = false
+		return false
+	}
+	for _, c := range tmpl.Commands {
+		if !visited[c.Command] {
+			if dfs(c.Command) {
+				return fmt.Errorf("cycle detected in post_commands for template %q", tmpl.Name)
+			}
+		}
+	}
+	return nil
 }

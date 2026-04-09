@@ -92,7 +92,7 @@ func TestScaffolder_Execute(t *testing.T) {
 
 	t.Run("Execute Chain", func(t *testing.T) {
 		params := map[string]string{"AppName": "testapp"}
-		err := handler.Execute(ctx, "hexagonal", "bootstrap", params)
+		err := handler.Execute(ctx, "hexagonal", "bootstrap", params, false)
 		require.NoError(t, err)
 
 		// Check files were created in mock FS
@@ -108,7 +108,7 @@ func TestScaffolder_Execute(t *testing.T) {
 		fs.files["cmd/conflict/main.go"] = []byte("exists")
 
 		params := map[string]string{"AppName": "conflict"}
-		err := handler.Execute(ctx, "hexagonal", "bootstrap", params)
+		err := handler.Execute(ctx, "hexagonal", "bootstrap", params, false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
 	})
