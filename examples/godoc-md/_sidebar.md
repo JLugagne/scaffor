@@ -1,6 +1,6 @@
-# joist Documentation
+# joist
 
-- [Home](index.md)
+- [Home](/)
 - [Contributing](contributing.md)
 
 ## Packages

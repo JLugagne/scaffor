@@ -1,41 +1,125 @@
 # Package: internal/joist/inbound/cli/commands
 
-Module: `github.com/JLugagne/joist/internal/joist/inbound/cli/commands`
+## Overview
+Inbound CLI command definitions. This package bridges the user-facing CLI (Cobra) with the underlying scaffolding service. Each function creates a Cobra command that wraps a specific scaffolding operation.
 
-## Exported Symbols
+## Functions
 
-### internal/joist/inbound/cli/commands/scaffold.go
-
+### NewListTemplatesCommand
 ```go
-No matches found for 'internal/joist/inbound/cli/commands/scaffold.go'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+func NewListTemplatesCommand(scaffolder service.ScaffolderCommands) *cobra.Command
 ```
 
-### func NewListTemplatesCommand(scaffolder service.ScaffolderCommands) *cobra.Command
+Creates the `joist list` command that displays all available templates.
 
-```go
-No matches found for 'func NewListTemplatesCommand(scaffolder service.ScaffolderCommands) *cobra.Command'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+**Command**: `joist list`
+
+**Output**: Lists template names with descriptions
+
+**Example**:
+```bash
+$ joist list
+Available Templates:
+
+- godoc-md: Generates Markdown documentation...
+- godoc-html: Generates HTML documentation...
 ```
 
-### func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command
-
+### NewDocCommand
 ```go
-No matches found for 'func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command
 ```
 
-### func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command
+Creates the `joist doc` command that displays template and command documentation.
 
-```go
-No matches found for 'func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+**Commands**:
+- `joist doc <template>` — Shows template overview and available commands
+- `joist doc <template> <command>` — Shows detailed information about a specific command, including required variables
+
+**Example**:
+```bash
+$ joist doc godoc-md
+Template: godoc-md
+Generates Markdown documentation from Go source code...
+
+Commands:
+  init - Generates the full documentation site in one shot
+  ...
+
+$ joist doc godoc-md init
+Command: init
+  Generates the full documentation site in one shot
+  
+  Variables:
+    --set ProjectName    Display name of the project
+    --set ModulePath     Go module path
+  ...
 ```
 
-### func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command
-
+### NewExecuteCommand
 ```go
-No matches found for 'func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command
 ```
 
+Creates the `joist execute` command that runs template commands with variable substitution.
+
+**Command**: `joist execute <template> <command> [--set KEY=VALUE]...`
+
+**Flags**:
+- `--set KEY=VALUE` — Provide template variables (repeatable)
+- `--run-commands` — Execute post-generation shell commands automatically (default: show for manual review)
+
+**Example**:
+```bash
+$ joist execute godoc-md init --set ProjectName=joist --set ModulePath=github.com/JLugagne/joist
+Created files:
+  examples/godoc-md/index.md
+  examples/godoc-md/_sidebar.md
+  ...
+
+SUCCESS: Executed godoc-md/init (2 commands, 0 skipped)
+```
+
+### NewLintCommand
+```go
+func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command
+```
+
+Creates the `joist lint` command that validates template manifests.
+
+**Command**: `joist lint <template>`
+
+**Output**: Reports validation errors found in the template (missing required fields, invalid paths, etc.)
+
+**Example**:
+```bash
+$ joist lint my-template
+Template: my-template
+- Command 'init': Missing required variable 'ProjectName'
+- File 'templates/main.go': Source file not found
+```
+
+Returns exit code 0 if valid, non-zero if errors found.
+
+## Usage
+
+These functions are called during CLI setup in `internal/joist/init.go:Setup()` to register all commands with the Cobra root command.
+
+```go
+scaffolderHandler := appcommands.NewScaffolderHandler(fs)
+
+rootCmd.AddCommand(
+    NewListTemplatesCommand(scaffolderHandler),
+    NewDocCommand(scaffolderHandler),
+    NewExecuteCommand(scaffolderHandler),
+    NewLintCommand(scaffolderHandler),
+)
+```
+
+## Architecture Notes
+
+Each command:
+- Accepts a `ScaffolderCommands` interface for dependency injection
+- Translates CLI flags and arguments to the service interface
+- Handles user-facing output and error messages
+- Enables testing by allowing mock service implementations

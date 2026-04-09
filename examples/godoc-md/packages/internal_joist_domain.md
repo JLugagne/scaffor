@@ -1,118 +1,109 @@
 # Package: internal/joist/domain
 
-Module: `github.com/JLugagne/joist/internal/joist/domain`
+## Overview
+Defines the core domain models for joist template scaffolding system. Contains the data structures that represent templates, commands, variables, and file transformations.
 
-## Exported Symbols
+## Types
 
-### internal/joist/domain/action.go
-
+### Template
 ```go
-No matches found for 'internal/joist/domain/action.go'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+type Template struct {
+	Name          string            `yaml:"name"`
+	Description   string            `yaml:"description"`
+	Commands      []TemplateCommand `yaml:"commands"`
+	ShellCommands []ShellCommand    `yaml:"shell_commands"`
+}
 ```
 
-### type Template struct { Name string; Description string; Commands []TemplateCommand; ShellCommands []ShellCommand }
+Represents a complete scaffolding template. A template is a reusable blueprint for generating files and running commands with variable substitution.
 
+- **Name**: Identifier for the template (used in CLI commands)
+- **Description**: Human-readable description of what the template does
+- **Commands**: List of named commands that can be executed within this template
+- **ShellCommands**: Post-execution shell commands to run after file scaffolding
+
+### TemplateCommand
 ```go
-No matches found for 'type Template struct { Name string; Description string; Commands []TemplateCommand; ShellCommands []ShellCommand }'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+type TemplateCommand struct {
+	Command      string             `yaml:"command"`
+	Description  string             `yaml:"description"`
+	Variables    []TemplateVariable `yaml:"variables"`
+	Files        []TemplateFile     `yaml:"files"`
+	PostCommands []string           `yaml:"post_commands"`
+	Hint         string             `yaml:"hint"`
+}
 ```
 
-### type TemplateCommand struct {
+Defines a single executable command within a template.
 
+- **Command**: Name of the command
+- **Description**: What this command does
+- **Variables**: Input variables required from the user (e.g., `--set ProjectName=MyApp`)
+- **Files**: Files to create/modify with variable substitution
+- **PostCommands**: Other template commands to chain/execute after this one
+- **Hint**: Guidance text shown to users after execution
+
+### TemplateVariable
 ```go
-No matches found for 'type TemplateCommand struct {'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+type TemplateVariable struct {
+	Key         string `yaml:"key"`
+	Description string `yaml:"description"`
+}
 ```
 
-### Command string
+Describes a variable that can be set when executing a template command. Users provide values via `--set Key=Value`.
 
+### TemplateFile
 ```go
-No matches found for 'Command string'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+type TemplateFile struct {
+	Source      string `yaml:"source"`
+	Destination string `yaml:"destination"`
+}
 ```
 
-### Description string
+Maps a template source file (with variable placeholders) to a destination path in the project. Both paths support variable substitution using `{{ .VariableName }}`.
 
+### LintError
 ```go
-No matches found for 'Description string'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+type LintError struct {
+	Command string `yaml:"command"`
+	Field   string `yaml:"field"`
+	Message string `yaml:"message"`
+}
 ```
 
-### Variables []TemplateVariable
+Represents a validation error found in a template manifest.
 
+#### Methods
+
+**Error() string**
 ```go
-No matches found for 'Variables []TemplateVariable'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+func (e LintError) Error() string
+```
+Implements the error interface, returning a formatted error message.
+
+### ShellCommand
+```go
+type ShellCommand struct {
+	Command string `yaml:"command"`
+	Mode    string `yaml:"mode"` // "all" or "per-file"
+}
 ```
 
-### Files []TemplateFile
+A shell command to run after scaffolding files are written.
 
-```go
-No matches found for 'Files []TemplateFile'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
+- **Command**: The shell command to execute
+- **Mode**: Execution strategy:
+  - `"all"`: Runs once with all created files available via `{{ .Files }}`
+  - `"per-file"`: Runs once per created file (available via `{{ .File }}`)
 
-### PostCommands []string
+Example: `go fmt {{ .File }}` with `mode: per-file` formats each generated file individually.
 
-```go
-No matches found for 'PostCommands []string'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
+## Usage
 
-### Hint string
+These types are loaded from YAML template manifests in `.joist-templates/` directories. The scaffolder service uses them to:
 
-```go
-No matches found for 'Hint string'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### }
-
-```go
-No matches found for '}'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### type TemplateVariable struct { Key string; Description string }
-
-```go
-No matches found for 'type TemplateVariable struct { Key string; Description string }'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### type TemplateFile struct { Source string; Destination string }
-
-```go
-No matches found for 'type TemplateFile struct { Source string; Destination string }'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### type LintError struct { Command string; Field string; Message string }
-
-```go
-No matches found for 'type LintError struct { Command string; Field string; Message string }'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### func (e LintError) Error() string
-
-```go
-No matches found for 'func (e LintError) Error() string'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### type ShellCommand struct { Command string; Mode string }
-
-```go
-No matches found for 'type ShellCommand struct { Command string; Mode string }'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
-### Sub-packages (use -r to include): service
-
-```go
-No matches found for 'Sub-packages (use -r to include): service'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
-
+1. Parse and validate template definitions
+2. Process variable substitutions
+3. Generate files at specified destinations
+4. Execute post-generation shell commands

@@ -1,20 +1,50 @@
 # Package: internal/joist/domain/repositories/filesystem
 
-Module: `github.com/JLugagne/joist/internal/joist/domain/repositories/filesystem`
+## Overview
+Defines the abstraction for file system operations. This interface allows the domain layer to remain independent of concrete file system implementations.
 
-## Exported Symbols
+## Types
 
-### internal/joist/domain/repositories/filesystem/filesystem.go
-
+### FileSystem
 ```go
-No matches found for 'internal/joist/domain/repositories/filesystem/filesystem.go'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
+type FileSystem interface {
+	ReadFile(ctx context.Context, path string) ([]byte, error)
+	WriteFile(ctx context.Context, path string, data []byte) error
+	MkdirAll(ctx context.Context, path string) error
+}
 ```
 
-### type FileSystem interface { ReadFile; WriteFile; MkdirAll }
+Defines the contract for all file system operations used by joist.
+
+#### Methods
+
+**ReadFile(ctx context.Context, path string) ([]byte, error)**
+
+Reads the entire contents of a file at the given path. Returns an error if the file does not exist or cannot be read.
+
+**WriteFile(ctx context.Context, path string, data []byte) error**
+
+Writes data to a file at the given path. Creates the file if it doesn't exist, or truncates and overwrites if it does. Returns an error if the write fails.
+
+**MkdirAll(ctx context.Context, path string) error**
+
+Creates all necessary parent directories for the given path, similar to `mkdir -p`. Returns an error if directory creation fails.
+
+## Implementations
+
+- `internal/joist/outbound/filesystem.FileSystem` — Real file system implementation using Go's `os` package
+
+## Usage
 
 ```go
-No matches found for 'type FileSystem interface { ReadFile; WriteFile; MkdirAll }'.
-Hint: run 'go-surgeon graph -s -d .' to list available symbols, or check the Receiver.Method format.
-```
+var fs FileSystem = filesystem.NewFileSystem()
 
+// Read a file
+data, err := fs.ReadFile(ctx, "path/to/file.txt")
+
+// Write a file
+err := fs.WriteFile(ctx, "path/to/output.txt", []byte("content"))
+
+// Create directories
+err := fs.MkdirAll(ctx, "path/to/deeply/nested/dir")
+```
