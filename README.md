@@ -1,155 +1,131 @@
-# joist: Structural Support for AI-Driven Development
+# joist
 
-A joist carries the load so the architect doesn't have to. **joist** carries the scaffolding so your LLM doesn't have to.
+**Make LLM-driven development deterministic.**
+Save 10–50 LLM turns per feature by offloading boilerplate and structure to executable templates.
 
-**joist** is a CLI scaffolding tool designed for AI agents. One command generates the entire file structure, pre-flight checks prevent overwrites, and `hints` tell the agent exactly what to do next — so the LLM spends its tokens on reasoning, not boilerplate.
-
-## Why joist
-
-When an LLM scaffolds a project from scratch it:
-- burns a large portion of its context window writing boilerplate files
-- guesses at folder structures and naming conventions, introducing drift
-- loses track of what it has already written across long sessions
-
-joist solves this by moving scaffolding out of the LLM entirely. The agent calls one deterministic command, gets back a list of files created and a `hint` describing the next step, and moves on. The LLM never has to think about file layout again.
-
-- **Offloads boilerplate completely:** one command writes every file — the LLM only needs to call it, not invent it.
-- **Guided execution via hints:** each command prints a context-aware Task List that tells the agent what to run next, eliminating improvisation.
-- **Safe by default:** pre-flight checks abort if any destination file already exists, preventing partial overwrites.
-- **Lint before execute:** validate templates before running them to catch issues early.
-- **Language-agnostic:** works with any tech stack — templates are plain files rendered with `text/template`.
-
-## Quick Start
-
-### Build
 ```bash
-go build -o joist ./cmd/joist
+joist execute hexagonal-cli add_entity --set Entity=User
+```
+```
+Created files:
+  internal/myapp/domain/user.go
+  internal/myapp/domain/repositories/user/user.go
+  internal/myapp/outbound/user/user.go
+  internal/myapp/app/commands/user_handler.go
+
+--- add_entity ---
+NEXT STEPS:
+  1. Define User fields in domain/user.go
+  2. Implement the adapter in outbound/user/
+  3. Wire the handler in init.go
+
+SUCCESS: Executed hexagonal-cli/add_entity
 ```
 
-### Install
+Structure enforced. Files in place. No planning required — the LLM just fills in the blanks.
+
+## Works with small models
+
+The examples in [`/examples/`](./examples/) were generated entirely by Claude Haiku using only `joist --help` as context — no custom instructions, no prompt engineering, no skills.
+
+Well-written templates reduce the reasoning burden enough to drop from Opus to Sonnet or Haiku for the majority of tasks.
+
+## The problem
+
+LLMs are good at reasoning. They are inefficient at generating repetitive code, maintaining consistent structure across files, and planning multi-step scaffolding without drifting. This wastes tokens, adds unnecessary iterations, and produces inconsistent outputs.
+
+Without joist, the LLM plans the structure, creates files one by one, fixes mistakes, iterates, loses context, drifts from conventions. In a known codebase, that's 10–15 extra turns. In a project the agent discovers cold, easily 40–50.
+
+With joist, the LLM calls one command, structure is generated instantly, hints tell it what's next, and it focuses only on business logic.
+
+## How it works
+
+The LLM discovers what's available, executes, then writes logic.
+
+```bash
+# 1. Discover
+joist list
+joist doc hexagonal-cli bootstrap
+
+# 2. Execute
+joist execute hexagonal-cli bootstrap --set AppName=myapp --set ModulePath=github.com/org/myapp
+
+# 3. The LLM completes the generated code (business logic only)
+```
+
+Each command creates files deterministically and prints a `hint` — a structured task list telling the LLM exactly what to do next. No planning required.
+
+**Feed it to your agent:** copy the contents of [`AI_INSTRUCTIONS.md`](./AI_INSTRUCTIONS.md) into your agent's system prompt (`.cursorrules`, `.clinerules`, AGENTS.md) to make it instantly aware of joist.
+
+## Templates
+
+A template is a directory with a `manifest.yaml` that declares commands, variables, files, and hints:
+
+```yaml
+name: hexagonal-cli
+commands:
+  - command: add_entity
+    variables:
+      - key: Entity
+        description: entity name (PascalCase)
+    files:
+      - source: domain/entity.go.tmpl
+        destination: internal/{{ .AppName }}/domain/{{ .Entity | lower }}.go
+      - source: domain/repositories/entity/entity.go.tmpl
+        destination: internal/{{ .AppName }}/domain/repositories/{{ .Entity | lower }}/{{ .Entity | lower }}.go
+    hint: |
+      Entity {{ .Entity }} added.
+      Now wire the handler in init.go and add a CLI command:
+        joist execute hexagonal-cli add_command --set Command={{ .Entity | lower }}
+
+shell_commands:
+  - command: "goimports -w {{ .Files }}"
+    mode: all
+```
+
+Templates are machine-readable, LLM-friendly, and composable via chained commands. They work with any language — Go, Python, TypeScript, Terraform, documentation, anything that's a text file.
+
+## Linting
+
+`joist lint` validates templates statically before execution:
+
+```
+$ joist lint broken-template
+LINT ERRORS in broken-template:
+
+  command "create", field "files.destination": variable "Nme" used but not declared (did you mean "Name"?)
+  command "create", field "post_commands": references undefined command "add_mock"
+
+2 issue(s) found
+```
+
+Catches undeclared variables, broken references, invalid modes, and suggests corrections via Levenshtein distance. Runs in milliseconds — put it in CI.
+
+## Safety
+
+Shell commands are printed after execution but **never run** unless you explicitly pass `--run-commands`. The LLM sees the commands, asks the user for confirmation, and the human stays in the loop. Pre-flight checks abort if any destination file already exists. Directory traversal (`..`) is rejected.
+
+## Installation
+
 ```bash
 go install github.com/JLugagne/joist/cmd/joist@latest
 ```
 
-### Shell completion (optional)
-```bash
-joist completion bash > /etc/bash_completion.d/joist   # bash
-joist completion zsh > "${fpath[1]}/_joist"             # zsh
-```
-
-### Usage Overview
-```bash
-# List scaffolding templates, lint, and read documentation
-joist list
-joist lint hexagonal
-joist doc hexagonal bootstrap
-
-# Execute a scaffolding workflow
-joist execute hexagonal bootstrap --set AppName=catalog
-```
-
-See `USAGE.md` for detailed documentation on all commands and flags.
-
-## Template-Driven Scaffolding
-
-Templates live in `.joist-templates/` at the root of your project:
-
-```
-.joist-templates/
-└── hexagonal/
-    ├── manifest.yaml
-    ├── .gitignore.tmpl
-    └── cmd/appname/main.go.tmpl
-```
-
-### `manifest.yaml`
-
-```yaml
-name: hexagonal
-description: |
-  Hexagonal architecture template.
-
-commands:
-  - command: bootstrap
-    description: Bootstraps a complete hexagonal project structure
-    variables:
-      - key: AppName
-        description: folder name for the main app
-    files:
-      - source: .gitignore.tmpl
-        destination: .gitignore
-      - source: cmd/appname/main.go.tmpl
-        destination: cmd/{{ .AppName }}/main.go
-    post_commands:
-      - command: go fmt ./...
-        mode: all
-    hint: |
-      Project bootstrapped. Run: joist execute hexagonal add_domain --set AppName={{ .AppName }}
-
-  - command: add_domain
-    description: Creates the domain layer
-    variables:
-      - key: AppName
-        description: folder name for the main app
-    files:
-      - source: domain/domain.go.tmpl
-        destination: internal/{{ .AppName }}/domain/domain.go
-```
-
-### Command components
-
-- **`variables`** — declared inputs, passed via `--set Key=Value`. Used in templates as `{{ .Key }}`.
-- **`files`** — files to generate. `destination` is itself a template (e.g. `cmd/{{ .AppName }}/main.go`). Omit `source` to create an empty file.
-- **`post_commands`** — shell commands to run after files are written. Each entry has a `command` (shell string) and an optional `mode`:
-  - `all` *(default)* — run once; `{{ .Files }}` expands to all created files
-  - `per-file` — run once per created file; `{{ .File }}` expands to each path
-- **`hint`** — a message printed after execution, rendered as a template. Use this to tell AI agents what to do next.
-
-### Template functions
-
-| Function | Description | Example |
-|----------|-------------|---------|
-| `lower` | Lowercase | `{{ .AppName \| lower }}` |
-| `upper` | Uppercase | `{{ .AppName \| upper }}` |
-| `title` | Capitalize first letter | `{{ .AppName \| title }}` |
-
-### Linting templates
-
-Before executing a template, validate it with `lint`:
+Or build from source:
 
 ```bash
-joist lint hexagonal
+git clone https://github.com/JLugagne/joist.git
+cd joist
+go build -o joist ./cmd/joist
 ```
 
-This checks:
-- All `post_commands` have a non-empty `command` and a valid `mode` (`all` or `per-file`)
-- All `{{ .VarName }}` used in destination paths are declared in `variables`
-- All `{{ .VarName }}` used in template source files are declared in `variables`
-
-### Running post-commands
-
-By default, post-commands are printed after scaffolding so you can review and run them manually:
-
-```
-Post-commands to run:
-  go fmt ./...
-
-Run with --run-commands to execute them automatically.
-```
-
-Pass `--run-commands` to execute them automatically via the shell:
+Shell completion:
 
 ```bash
-joist execute hexagonal bootstrap --set AppName=catalog --run-commands
+joist completion bash > /etc/bash_completion.d/joist
+joist completion zsh > "${fpath[1]}/_joist"
 ```
 
-### Best practices for AI agents
+## Documentation
 
-1. **One command per concern:** Define small, composable commands (`add_repository`, `add_usecase`, `add_handler`) rather than one massive generator. The agent chains them; joist chains the files.
-2. **Use hints as a task queue:** Write `hint` as an ordered list of `joist execute` commands the agent should run next. The agent reads the hint output and acts on it — no planning required.
-3. **Never ask the LLM to write boilerplate:** if a file is structural (main.go, Makefile, CI config), put it in a template. Reserve the LLM for files that require actual reasoning.
-4. **Lint in CI:** Run `joist lint <template>` in your pipeline so broken templates never reach the agent.
-
-## Examples
-
-The templates in [`/examples/`](./examples/) were generated entirely by Claude Haiku using only `joist --help` as context — no custom instructions, no prompt engineering, no skills.
+See [`USAGE.md`](./USAGE.md) for the full command reference and [`AI_INSTRUCTIONS.md`](./AI_INSTRUCTIONS.md) for instructions to add to your agent's system prompt.
