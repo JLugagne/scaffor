@@ -1,0 +1,18 @@
+package commands
+
+import (
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain/service"
+	"github.com/spf13/cobra"
+)
+
+// NewRootCommand returns the root CLI command.
+// It depends on the service interface (primary port), not on the implementation.
+func NewRootCommand(svc service.Commands) *cobra.Command {
+	return &cobra.Command{
+		Use:   "run",
+		Short: "Run the main command",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return svc.Run(cmd.Context())
+		},
+	}
+}

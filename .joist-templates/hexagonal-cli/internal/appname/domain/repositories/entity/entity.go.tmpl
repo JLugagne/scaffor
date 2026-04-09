@@ -1,0 +1,15 @@
+package {{ .Entity | lower }}
+
+import (
+	"context"
+
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain"
+)
+
+// {{ .Entity }}Repository defines the persistence interface for {{ .Entity }}.
+// This is a port — implement it in outbound/{{ .Entity | lower }}/.
+type {{ .Entity }}Repository interface {
+	Create(ctx context.Context, entity domain.{{ .Entity }}) error
+	FindByID(ctx context.Context, id domain.{{ .Entity }}ID) (*domain.{{ .Entity }}, error)
+	Delete(ctx context.Context, id domain.{{ .Entity }}ID) error
+}

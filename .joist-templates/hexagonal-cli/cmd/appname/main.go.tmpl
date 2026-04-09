@@ -1,0 +1,18 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"{{ .ModulePath }}/internal/{{ .AppName }}"
+)
+
+func main() {
+	runner := {{ .AppName }}.Setup()
+	ctx := context.Background()
+	if err := runner(ctx, os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}

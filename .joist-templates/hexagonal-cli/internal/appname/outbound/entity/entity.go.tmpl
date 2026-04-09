@@ -1,0 +1,33 @@
+package {{ .Entity | lower }}
+
+import (
+	"context"
+
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain"
+)
+
+// {{ .Entity }}Repository is the concrete adapter for {{ .Entity }} persistence.
+// Implement the repository interface defined in domain/repositories/{{ .Entity | lower }}/.
+type {{ .Entity }}Repository struct {
+	// Add dependencies here (db connection, client, etc.)
+}
+
+// New{{ .Entity }}Repository creates a new {{ .Entity }}Repository.
+func New{{ .Entity }}Repository() *{{ .Entity }}Repository {
+	return &{{ .Entity }}Repository{}
+}
+
+// Create persists a new {{ .Entity }}.
+func (r *{{ .Entity }}Repository) Create(ctx context.Context, entity domain.{{ .Entity }}) error {
+	panic("not implemented")
+}
+
+// FindByID retrieves a {{ .Entity }} by its ID.
+func (r *{{ .Entity }}Repository) FindByID(ctx context.Context, id domain.{{ .Entity }}ID) (*domain.{{ .Entity }}, error) {
+	panic("not implemented")
+}
+
+// Delete removes a {{ .Entity }} by its ID.
+func (r *{{ .Entity }}Repository) Delete(ctx context.Context, id domain.{{ .Entity }}ID) error {
+	panic("not implemented")
+}

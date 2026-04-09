@@ -1,0 +1,24 @@
+package commands
+
+import (
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain/service"
+	"github.com/spf13/cobra"
+)
+
+// New{{ .Command | title }}Command returns the "{{ .Command | lower }}" CLI command.
+func New{{ .Command | title }}Command(svc service.Commands) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "{{ .Command | lower }}",
+		Short: "{{ .Command | title }} command",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Implement command logic here.
+			// Use svc to call application use cases.
+			return svc.Run(cmd.Context())
+		},
+	}
+
+	// Add flags here:
+	// cmd.Flags().StringVar(&myFlag, "flag-name", "", "flag description")
+
+	return cmd
+}

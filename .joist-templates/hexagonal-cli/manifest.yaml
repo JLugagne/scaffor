@@ -1,0 +1,168 @@
+name: hexagonal-cli
+description: |
+  Hexagonal architecture template for Go CLI applications.
+  Mirrors the structure used by joist itself:
+    cmd/<AppName>/main.go           — entrypoint
+    internal/<AppName>/init.go      — wiring (dependency injection)
+    internal/<AppName>/domain/      — entities, value objects, repository interfaces
+    internal/<AppName>/app/         — application services (use cases / command handlers)
+    internal/<AppName>/inbound/     — driving adapters (CLI, HTTP, gRPC)
+    internal/<AppName>/outbound/    — driven adapters (filesystem, database, API clients)
+
+commands:
+  - command: bootstrap
+    description: Scaffolds the full project skeleton with all layers
+    variables:
+      - key: AppName
+        description: application name (used for folder names and module path)
+      - key: ModulePath
+        description: Go module path (e.g. github.com/org/repo)
+    files:
+      - source: go.mod.tmpl
+        destination: go.mod
+      - source: cmd/appname/main.go.tmpl
+        destination: cmd/{{ .AppName }}/main.go
+      - source: internal/appname/init.go.tmpl
+        destination: internal/{{ .AppName }}/init.go
+      - source: internal/appname/domain/model.go.tmpl
+        destination: internal/{{ .AppName }}/domain/model.go
+      - source: internal/appname/domain/repositories/filesystem/filesystem.go.tmpl
+        destination: internal/{{ .AppName }}/domain/repositories/filesystem/filesystem.go
+      - source: internal/appname/domain/service/service.go.tmpl
+        destination: internal/{{ .AppName }}/domain/service/service.go
+      - source: internal/appname/app/commands/handler.go.tmpl
+        destination: internal/{{ .AppName }}/app/commands/handler.go
+      - source: internal/appname/inbound/cli/commands/root.go.tmpl
+        destination: internal/{{ .AppName }}/inbound/cli/commands/root.go
+      - source: internal/appname/outbound/filesystem/filesystem.go.tmpl
+        destination: internal/{{ .AppName }}/outbound/filesystem/filesystem.go
+    hint: |
+      Project {{ .AppName }} bootstrapped with hexagonal architecture.
+
+      Structure:
+        cmd/{{ .AppName }}/main.go                                          — entrypoint
+        internal/{{ .AppName }}/init.go                                     — wiring
+        internal/{{ .AppName }}/domain/                                     — entities & repository interfaces
+        internal/{{ .AppName }}/domain/service/                             — domain service interfaces
+        internal/{{ .AppName }}/app/commands/                               — application layer (use cases)
+        internal/{{ .AppName }}/inbound/cli/commands/                       — driving adapter (CLI)
+        internal/{{ .AppName }}/outbound/filesystem/                        — driven adapter (filesystem)
+
+      NEXT STEPS:
+        1. Define your domain entities in internal/{{ .AppName }}/domain/model.go
+        2. Add repository methods to the FileSystem interface in domain/repositories/filesystem/
+        3. Implement the repository in outbound/filesystem/
+        4. Add use case logic in app/commands/handler.go
+        5. Wire CLI commands in inbound/cli/commands/root.go
+        6. Add new domain entities with:
+             joist execute hexagonal-cli add_entity --set AppName={{ .AppName }} --set ModulePath={{ .ModulePath }} --set Entity=<name>
+
+  - command: add_entity
+    description: Adds a new domain entity with its repository interface and adapter stub
+    variables:
+      - key: AppName
+        description: application name
+      - key: ModulePath
+        description: Go module path
+      - key: Entity
+        description: entity name (PascalCase, e.g. Book, Order, User)
+    files:
+      - source: internal/appname/domain/entity.go.tmpl
+        destination: internal/{{ .AppName }}/domain/{{ .Entity | lower }}.go
+      - source: internal/appname/domain/repositories/entity/entity.go.tmpl
+        destination: internal/{{ .AppName }}/domain/repositories/{{ .Entity | lower }}/{{ .Entity | lower }}.go
+      - source: internal/appname/outbound/entity/entity.go.tmpl
+        destination: internal/{{ .AppName }}/outbound/{{ .Entity | lower }}/{{ .Entity | lower }}.go
+      - source: internal/appname/app/commands/entity_handler.go.tmpl
+        destination: internal/{{ .AppName }}/app/commands/{{ .Entity | lower }}_handler.go
+    hint: |
+      Entity {{ .Entity }} added to {{ .AppName }}.
+
+      Created:
+        internal/{{ .AppName }}/domain/{{ .Entity | lower }}.go                                  — entity definition
+        internal/{{ .AppName }}/domain/repositories/{{ .Entity | lower }}/{{ .Entity | lower }}.go — repository interface (port)
+        internal/{{ .AppName }}/outbound/{{ .Entity | lower }}/{{ .Entity | lower }}.go            — repository adapter stub
+        internal/{{ .AppName }}/app/commands/{{ .Entity | lower }}_handler.go                     — use case handler stub
+
+      NEXT STEPS:
+        1. Define {{ .Entity }} fields in domain/{{ .Entity | lower }}.go
+        2. Add repository methods to the interface in domain/repositories/{{ .Entity | lower }}/
+        3. Implement the adapter in outbound/{{ .Entity | lower }}/
+        4. Add use case logic in app/commands/{{ .Entity | lower }}_handler.go
+        5. Wire the new handler in internal/{{ .AppName }}/init.go
+        6. Add a CLI command in inbound/cli/commands/ that calls the handler
+
+  - command: add_inbound
+    description: Adds a new inbound (driving) adapter package
+    variables:
+      - key: AppName
+        description: application name
+      - key: ModulePath
+        description: Go module path
+      - key: Adapter
+        description: adapter name (e.g. http, grpc, cli)
+    files:
+      - source: internal/appname/inbound/adapter/adapter.go.tmpl
+        destination: internal/{{ .AppName }}/inbound/{{ .Adapter | lower }}/{{ .Adapter | lower }}.go
+    hint: |
+      Inbound adapter {{ .Adapter }} added.
+
+      Created:
+        internal/{{ .AppName }}/inbound/{{ .Adapter | lower }}/{{ .Adapter | lower }}.go
+
+      NEXT STEPS:
+        1. Define the adapter struct and its dependencies (inject domain service interfaces)
+        2. Implement request handling (HTTP routes, gRPC methods, CLI commands, etc.)
+        3. Wire it in internal/{{ .AppName }}/init.go
+
+  - command: add_outbound
+    description: Adds a new outbound (driven) adapter package
+    variables:
+      - key: AppName
+        description: application name
+      - key: ModulePath
+        description: Go module path
+      - key: Adapter
+        description: adapter name (e.g. postgres, redis, s3)
+    files:
+      - source: internal/appname/outbound/adapter/adapter.go.tmpl
+        destination: internal/{{ .AppName }}/outbound/{{ .Adapter | lower }}/{{ .Adapter | lower }}.go
+    hint: |
+      Outbound adapter {{ .Adapter }} added.
+
+      Created:
+        internal/{{ .AppName }}/outbound/{{ .Adapter | lower }}/{{ .Adapter | lower }}.go
+
+      NEXT STEPS:
+        1. Implement the repository interface(s) defined in domain/repositories/
+        2. Wire it in internal/{{ .AppName }}/init.go to replace or complement existing adapters
+
+  - command: add_command
+    description: Adds a new CLI command (cobra subcommand) to the inbound CLI adapter
+    variables:
+      - key: AppName
+        description: application name
+      - key: ModulePath
+        description: Go module path
+      - key: Command
+        description: command name (e.g. create, list, delete, sync)
+    files:
+      - source: internal/appname/inbound/cli/commands/command/command.go.tmpl
+        destination: internal/{{ .AppName }}/inbound/cli/commands/{{ .Command | lower }}.go
+    hint: |
+      CLI command "{{ .Command | lower }}" added.
+
+      Created:
+        internal/{{ .AppName }}/inbound/cli/commands/{{ .Command | lower }}.go
+
+      NEXT STEPS:
+        1. Add flags and arguments to the command in {{ .Command | lower }}.go
+        2. Implement the command logic (call use cases via the service interface)
+        3. Register the command in internal/{{ .AppName }}/init.go:
+             rootCmd.AddCommand(
+                 clicommands.New{{ .Command | title }}Command(handler),
+             )
+
+shell_commands:
+  - command: "goimports -w {{ .Files }}"
+    mode: all

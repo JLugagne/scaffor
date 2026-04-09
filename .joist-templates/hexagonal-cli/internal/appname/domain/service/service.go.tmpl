@@ -1,0 +1,16 @@
+package service
+
+import (
+	"context"
+)
+
+// Commands defines the interface for application use cases.
+// This is the primary port — driving adapters (CLI, HTTP) depend on this.
+// Implement it in app/commands/.
+type Commands interface {
+	// Add your use case methods here.
+	// Example:
+	//   CreateBook(ctx context.Context, title, author string) error
+	//   ListBooks(ctx context.Context) ([]domain.Book, error)
+	Run(ctx context.Context) error
+}

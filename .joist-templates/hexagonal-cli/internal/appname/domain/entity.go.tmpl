@@ -1,0 +1,17 @@
+package domain
+
+// {{ .Entity }} is a domain entity.
+// Define its fields and behavior here.
+type {{ .Entity }} struct {
+	ID {{ .Entity }}ID
+	// Add fields here
+}
+
+// {{ .Entity }}ID is a typed identifier for {{ .Entity }}.
+type {{ .Entity }}ID string
+
+// New{{ .Entity }} creates a new {{ .Entity }}.
+func New{{ .Entity }}() (*{{ .Entity }}, error) {
+	// Add validation and construction logic here.
+	return &{{ .Entity }}{}, nil
+}

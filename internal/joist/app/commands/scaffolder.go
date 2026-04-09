@@ -334,18 +334,13 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 	return walk(commandName)
 }
 
-// Lint validates a template manifest and returns a list of issues found.
-// It checks:
-//   - all declared variable keys start with a capital letter (required by text/template)
-//   - all variables referenced in destination paths and template file sources are declared
-//   - all post_commands have a non-empty command and a valid mode ("all" or "per-file")
-//
-// When an undeclared variable is found, it suggests the closest declared variable
-// by Levenshtein distance if one is within a reasonable edit distance.
-func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []domain.LintError {
+func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templateDir string) []domain.LintError {
 	// Parse the manifest directly so we can report all issues even when the DAG is invalid.
 	var tmpl domain.Template
-	path := filepath.Join(".joist-templates", templateName, "manifest.yaml")
+	if templateDir == "" {
+		templateDir = ".joist-templates"
+	}
+	path := filepath.Join(templateDir, templateName, "manifest.yaml")
 	data, err := h.fs.ReadFile(ctx, path)
 	if err != nil {
 		return []domain.LintError{{Field: "manifest", Message: fmt.Sprintf("failed to read manifest for template %s: %v", templateName, err)}}
@@ -417,7 +412,7 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 			if f.Source == "" {
 				continue
 			}
-			tmplPath := filepath.Join(".joist-templates", tmpl.Name, f.Source)
+			tmplPath := filepath.Join(templateDir, tmpl.Name, f.Source)
 			data, err := h.fs.ReadFile(ctx, tmplPath)
 			if err != nil {
 				errs = append(errs, domain.LintError{

@@ -212,12 +212,12 @@ func TestScaffolder_Lint(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Valid template returns no errors", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-ok")
+		errs := handler.Lint(ctx, "lint-ok", "")
 		assert.Empty(t, errs, "declared variables used with | lower / | upper pipes should not produce errors")
 	})
 
 	t.Run("Piped undeclared variable in destination path is caught", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-bad")
+		errs := handler.Lint(ctx, "lint-bad", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "broken" && e.Field == "files.destination" && strings.Contains(e.Message, "Missing") {
@@ -228,7 +228,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Piped undeclared variable in source template is caught", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-bad")
+		errs := handler.Lint(ctx, "lint-bad", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "broken" && strings.Contains(e.Field, "broken.go.tmpl") && strings.Contains(e.Message, "AlsoMissing") {
@@ -239,7 +239,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Undeclared variable in destination path", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-bad")
+		errs := handler.Lint(ctx, "lint-bad", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "broken" && e.Field == "files.destination" && strings.Contains(e.Message, "Missing") {
@@ -250,7 +250,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Undeclared variable in source template file", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-bad")
+		errs := handler.Lint(ctx, "lint-bad", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "broken" && strings.Contains(e.Field, "broken.go.tmpl") && strings.Contains(e.Message, "AlsoMissing") {
@@ -261,7 +261,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Post command references undefined command", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-bad")
+		errs := handler.Lint(ctx, "lint-bad", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "broken" && e.Field == "post_commands" && strings.Contains(e.Message, "ghost") {
@@ -272,7 +272,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Lowercase variable key is flagged", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-lowercase")
+		errs := handler.Lint(ctx, "lint-lowercase", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "create" && e.Field == "variables" && strings.Contains(e.Message, "appName") {
@@ -283,7 +283,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Typo in variable name suggests closest match", func(t *testing.T) {
-		errs := handler.Lint(ctx, "lint-typo")
+		errs := handler.Lint(ctx, "lint-typo", "")
 		found := false
 		for _, e := range errs {
 			if e.Command == "create" && strings.Contains(e.Message, "ApName") && strings.Contains(e.Message, "AppName") {
@@ -294,7 +294,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	})
 
 	t.Run("Missing template returns lint error", func(t *testing.T) {
-		errs := handler.Lint(ctx, "nonexistent")
+		errs := handler.Lint(ctx, "nonexistent", "")
 		require.NotEmpty(t, errs)
 		assert.Equal(t, "manifest", errs[0].Field)
 	})
@@ -492,7 +492,7 @@ func TestScaffolder_Lint_Extra(t *testing.T) {
 			".joist-templates/bad/manifest.yaml": []byte(":\tinvalid: yaml: ["),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		errs := handler.Lint(ctx, "bad")
+		errs := handler.Lint(ctx, "bad", "")
 		require.NotEmpty(t, errs)
 		assert.Equal(t, "manifest", errs[0].Field)
 	})
@@ -506,7 +506,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		errs := handler.Lint(ctx, "tmpl")
+		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
 			if e.Field == "shell_commands" && strings.Contains(e.Message, "empty") {
@@ -526,7 +526,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		errs := handler.Lint(ctx, "tmpl")
+		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
 			if e.Field == "shell_commands" && strings.Contains(e.Message, "badmode") {
@@ -592,25 +592,25 @@ commands:
 
 	t.Run("if-else node: declared variable not flagged", func(t *testing.T) {
 		h := makeHandler(`{{ if .Name }}hello{{ else }}world{{ end }}`)
-		errs := h.Lint(ctx, "tmpl")
+		errs := h.Lint(ctx, "tmpl", "")
 		assert.Empty(t, errs)
 	})
 
 	t.Run("range-else node: declared variable not flagged", func(t *testing.T) {
 		h := makeHandler(`{{ range .Name }}x{{ else }}y{{ end }}`)
-		errs := h.Lint(ctx, "tmpl")
+		errs := h.Lint(ctx, "tmpl", "")
 		assert.Empty(t, errs)
 	})
 
 	t.Run("with-else node: declared variable not flagged", func(t *testing.T) {
 		h := makeHandler(`{{ with .Name }}ok{{ else }}fallback{{ end }}`)
-		errs := h.Lint(ctx, "tmpl")
+		errs := h.Lint(ctx, "tmpl", "")
 		assert.Empty(t, errs)
 	})
 
 	t.Run("if-else node: undeclared variable in condition is flagged", func(t *testing.T) {
 		h := makeHandler(`{{ if .Missing }}hello{{ else }}world{{ end }}`)
-		errs := h.Lint(ctx, "tmpl")
+		errs := h.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
 			if strings.Contains(e.Message, "Missing") {
@@ -639,7 +639,7 @@ commands:
 	}}
 	handler := commands.NewScaffolderHandler(fs)
 	// Should not panic; lint may report parse error or nothing for that field.
-	_ = handler.Lint(ctx, "tmpl")
+	_ = handler.Lint(ctx, "tmpl", "")
 }
 
 // TestScaffolder_LevenshteinEdgeCases covers the la==0 and lb==0 branches.
@@ -661,7 +661,7 @@ commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		errs := handler.Lint(ctx, "tmpl")
+		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
 			if strings.Contains(e.Message, "Missing") {
@@ -684,7 +684,7 @@ commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		errs := handler.Lint(ctx, "tmpl")
+		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
 			if strings.Contains(e.Message, "VeryLongUndeclaredVariableName") {

@@ -123,7 +123,6 @@ the post_commands that will run after scaffolding.`,
 				}
 			}
 
-
 			return nil
 		},
 	}
@@ -214,9 +213,10 @@ Post-commands support two modes:
 	return cmd
 }
 
-// NewLintCommand returns a cobra command that lints a template manifest.
 func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
-	return &cobra.Command{
+	var templateDir string
+
+	cmd := &cobra.Command{
 		Use:   "lint <template>",
 		Short: "Lint a template manifest for issues",
 		Long: `Validate a template manifest and report any issues.
@@ -226,13 +226,16 @@ Checks include:
   - post_commands reference commands that exist in the same template
   - Required fields are present and non-empty`,
 		Example: `  # Lint the "service" template
-  joist lint service`,
+  joist lint service
+
+  # Lint a template in a custom directory
+  joist lint -d my-templates service`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			templateName := args[0]
 
-			errs := scaffolder.Lint(ctx, templateName)
+			errs := scaffolder.Lint(ctx, templateName, templateDir)
 			if len(errs) == 0 {
 				fmt.Printf("OK: %s has no issues\n", templateName)
 				return nil
@@ -246,4 +249,7 @@ Checks include:
 			return fmt.Errorf("lint failed with %d issue(s)", len(errs))
 		},
 	}
+
+	cmd.Flags().StringVarP(&templateDir, "dir", "d", "", "Directory containing templates (default: .joist-templates)")
+	return cmd
 }

@@ -1,0 +1,30 @@
+package commands
+
+import (
+	"context"
+
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain"
+	{{ .Entity | lower }}repo "{{ .ModulePath }}/internal/{{ .AppName }}/domain/repositories/{{ .Entity | lower }}"
+)
+
+// {{ .Entity }}Handler implements use cases for the {{ .Entity }} entity.
+type {{ .Entity }}Handler struct {
+	repo {{ .Entity | lower }}repo.{{ .Entity }}Repository
+}
+
+// New{{ .Entity }}Handler creates a new {{ .Entity }}Handler.
+func New{{ .Entity }}Handler(repo {{ .Entity | lower }}repo.{{ .Entity }}Repository) *{{ .Entity }}Handler {
+	return &{{ .Entity }}Handler{repo: repo}
+}
+
+// Create{{ .Entity }} handles the creation of a new {{ .Entity }}.
+func (h *{{ .Entity }}Handler) Create{{ .Entity }}(ctx context.Context) (*domain.{{ .Entity }}, error) {
+	entity, err := domain.New{{ .Entity }}()
+	if err != nil {
+		return nil, err
+	}
+	if err := h.repo.Create(ctx, *entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}

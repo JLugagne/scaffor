@@ -19,6 +19,9 @@ joist list
 # Lint a template manifest for issues before executing
 joist lint <template>
 
+# Lint a template in a custom directory
+joist lint -d <templates-dir> <template>
+
 # Show documentation for a template (lists all its commands)
 joist doc <template>
 
@@ -58,8 +61,14 @@ joist execute hexagonal bootstrap --set AppName=catalog --run-commands
 - **Undeclared variables in destination paths** — `{{ .Foo }}` used in a `files.destination` but `Foo` is not in the command's `variables` list
 - **Undeclared variables in source templates** — `{{ .Foo }}` used inside a template file but `Foo` is not declared
 
+**Flags:**
+- `--dir, -d <path>` — Specify a custom template directory (default: `.joist-templates`)
+
 ```
 $ joist lint hexagonal
+OK: hexagonal has no issues
+
+$ joist lint -d my-templates hexagonal
 OK: hexagonal has no issues
 
 $ joist lint broken-template

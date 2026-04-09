@@ -1,0 +1,23 @@
+package {{ .Adapter | lower }}
+
+import (
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain/service"
+)
+
+// {{ .Adapter | title }}Adapter is a driving adapter.
+// It receives external requests and translates them into calls
+// to the application layer via the service interface (primary port).
+type {{ .Adapter | title }}Adapter struct {
+	svc service.Commands
+}
+
+// New{{ .Adapter | title }}Adapter creates a new {{ .Adapter | title }}Adapter.
+func New{{ .Adapter | title }}Adapter(svc service.Commands) *{{ .Adapter | title }}Adapter {
+	return &{{ .Adapter | title }}Adapter{svc: svc}
+}
+
+// TODO: Implement request handling methods.
+// Examples:
+//   - HTTP: define routes and handlers using net/http or a router
+//   - gRPC: implement the generated server interface
+//   - CLI: return *cobra.Command instances

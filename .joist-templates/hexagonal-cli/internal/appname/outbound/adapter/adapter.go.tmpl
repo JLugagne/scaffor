@@ -1,0 +1,19 @@
+package {{ .Adapter | lower }}
+
+// {{ .Adapter | title }}Adapter is a driven adapter.
+// It implements one or more repository interfaces defined in domain/repositories/
+// and translates domain operations into infrastructure calls.
+type {{ .Adapter | title }}Adapter struct {
+	// Add infrastructure dependencies here (db connection, client, config, etc.)
+}
+
+// New{{ .Adapter | title }}Adapter creates a new {{ .Adapter | title }}Adapter.
+func New{{ .Adapter | title }}Adapter() *{{ .Adapter | title }}Adapter {
+	return &{{ .Adapter | title }}Adapter{}
+}
+
+// TODO: Implement the repository interface(s) from domain/repositories/.
+// Examples:
+//   - Postgres: implement Create/FindByID/Delete with SQL queries
+//   - Redis: implement cache operations
+//   - S3: implement file storage operations

@@ -1,0 +1,25 @@
+package commands
+
+import (
+	"context"
+
+	"{{ .ModulePath }}/internal/{{ .AppName }}/domain/repositories/filesystem"
+)
+
+// Handler implements the application use cases.
+// It depends on ports (repository interfaces), not on adapters.
+type Handler struct {
+	fs filesystem.FileSystem
+}
+
+// NewHandler creates a new Handler with the given dependencies.
+func NewHandler(fs filesystem.FileSystem) *Handler {
+	return &Handler{fs: fs}
+}
+
+// Run executes the main use case.
+func (h *Handler) Run(ctx context.Context) error {
+	// Implement your use case logic here.
+	// Use h.fs to interact with the file system through the port.
+	return nil
+}

@@ -1,0 +1,38 @@
+package {{ .AppName }}
+
+import (
+	"context"
+
+	"{{ .ModulePath }}/internal/{{ .AppName }}/app/commands"
+	clicommands "{{ .ModulePath }}/internal/{{ .AppName }}/inbound/cli/commands"
+	"{{ .ModulePath }}/internal/{{ .AppName }}/outbound/filesystem"
+	"github.com/spf13/cobra"
+)
+
+// Runner is a function that executes the CLI logic.
+type Runner func(ctx context.Context, args []string) error
+
+func Setup() Runner {
+	return func(ctx context.Context, args []string) error {
+		// Driven adapters (outbound)
+		fs := filesystem.NewFileSystem()
+
+		// Application layer
+		handler := commands.NewHandler(fs)
+
+		// Driving adapters (inbound)
+		rootCmd := &cobra.Command{
+			Use:   "{{ .AppName }}",
+			Short: "{{ .AppName | title }} CLI application",
+			SilenceErrors: true,
+			SilenceUsage:  true,
+		}
+
+		rootCmd.AddCommand(
+			clicommands.NewRootCommand(handler),
+		)
+
+		rootCmd.SetArgs(args)
+		return rootCmd.ExecuteContext(ctx)
+	}
+}
