@@ -137,6 +137,10 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			}
 			targetPath := pathBuf.String()
 
+			if err := safeDestination(targetPath); err != nil {
+				return err
+			}
+
 			// Create directories
 			dir := filepath.Dir(targetPath)
 			if err := h.fs.MkdirAll(ctx, dir); err != nil {
@@ -311,6 +315,10 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 			}
 			targetPath := pathBuf.String()
 
+			if err := safeDestination(targetPath); err != nil {
+				return err
+			}
+
 			_, err = h.fs.ReadFile(ctx, targetPath)
 			if err == nil {
 				return fmt.Errorf("pre-flight check failed: file %s already exists", targetPath)
@@ -444,6 +452,18 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 	}
 
 	return errs
+}
+
+// safeDestination rejects paths that contain ".." components to prevent
+// directory traversal outside the project directory.
+func safeDestination(path string) error {
+	clean := filepath.Clean(path)
+	for _, part := range strings.Split(clean, string(filepath.Separator)) {
+		if part == ".." {
+			return fmt.Errorf("destination path %q is not allowed: contains \"..\"", path)
+		}
+	}
+	return nil
 }
 
 // extractTemplateVars parses a Go text/template string and returns all
