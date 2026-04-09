@@ -149,3 +149,7 @@ joist scaffold execute hexagonal bootstrap --set AppName=catalog --run-commands
 2. **Use hints as a task queue:** Write `hint` as an ordered list of `joist scaffold execute` commands the agent should run next. The agent reads the hint output and acts on it — no planning required.
 3. **Never ask the LLM to write boilerplate:** if a file is structural (main.go, Makefile, CI config), put it in a template. Reserve the LLM for files that require actual reasoning.
 4. **Lint in CI:** Run `joist scaffold lint <template>` in your pipeline so broken templates never reach the agent.
+
+## Examples
+
+The templates in [`/examples/`](./examples/) were generated entirely by Claude Haiku using only `joist --help` as context — no custom instructions, no prompt engineering, no skills.

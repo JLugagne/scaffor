@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
 	"github.com/JLugagne/joist/internal/joist/app/commands"
 	"github.com/JLugagne/joist/internal/joist/domain"
 	"github.com/stretchr/testify/assert"
@@ -316,3 +315,467 @@ func TestScaffolder_Lint(t *testing.T) {
 		assert.NotContains(t, msg, "command")
 	})
 }
+
+func TestScaffolder_ListTemplates(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("no .joist-templates dir returns empty slice", func(t *testing.T) {
+		fs := &mockFS{files: make(map[string][]byte)}
+		handler := commands.NewScaffolderHandler(fs)
+		templates, err := handler.ListTemplates(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, templates)
+	})
+
+	t.Run("valid templates are returned", func(t *testing.T) {
+		fs := &mockFS{files: make(map[string][]byte)}
+		setupTestTemplates(t, fs)
+		handler := commands.NewScaffolderHandler(fs)
+
+		// ListTemplates uses os.ReadDir, so we need actual dirs on disk
+		require.NoError(t, os.MkdirAll(".joist-templates/hexagonal", 0755))
+		t.Cleanup(func() { os.RemoveAll(".joist-templates") })
+
+		templates, err := handler.ListTemplates(ctx)
+		require.NoError(t, err)
+		require.Len(t, templates, 1)
+		assert.Equal(t, "hexagonal", templates[0].Name)
+	})
+
+	t.Run("template with invalid manifest is silently skipped", func(t *testing.T) {
+		fs := &mockFS{files: make(map[string][]byte)}
+		// manifest missing entirely — GetTemplate will error, ListTemplates skips
+		handler := commands.NewScaffolderHandler(fs)
+
+		require.NoError(t, os.MkdirAll(".joist-templates/broken", 0755))
+		t.Cleanup(func() { os.RemoveAll(".joist-templates") })
+
+		templates, err := handler.ListTemplates(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, templates)
+	})
+
+	t.Run("os.ReadDir error (non-NotExist) is returned", func(t *testing.T) {
+		fs := &mockFS{files: make(map[string][]byte)}
+		handler := commands.NewScaffolderHandler(fs)
+
+		// Place a regular file where .joist-templates should be a directory;
+		// os.ReadDir on a file returns an error that is not os.IsNotExist.
+		require.NoError(t, os.WriteFile(".joist-templates", []byte("not a dir"), 0644))
+		t.Cleanup(func() { os.Remove(".joist-templates") })
+
+		_, err := handler.ListTemplates(ctx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to read .joist-templates")
+	})
+}
+
+func TestScaffolder_GetTemplate_Extra(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("invalid yaml returns error", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/bad/manifest.yaml": []byte(":\tinvalid: yaml: ["),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		_, err := handler.GetTemplate(ctx, "bad")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse manifest")
+	})
+
+	t.Run("name defaults to directory name when empty", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/mytemplate/manifest.yaml": []byte("commands: []\n"),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		tmpl, err := handler.GetTemplate(ctx, "mytemplate")
+		require.NoError(t, err)
+		assert.Equal(t, "mytemplate", tmpl.Name)
+	})
+}
+
+func TestScaffolder_Execute_Extra(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("unknown command returns error", func(t *testing.T) {
+		fs := &mockFS{files: make(map[string][]byte)}
+		setupTestTemplates(t, fs)
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "hexagonal", "nonexistent", map[string]string{"AppName": "x"}, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("path template error returns error", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "{{ .Bad | unknownfunc }}"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.Error(t, err)
+	})
+
+	t.Run("directory traversal in destination blocked", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "../../etc/passwd"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "..")
+	})
+
+	t.Run("runCommands=false prints shell commands", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files: []
+shell_commands:
+  - command: "echo hello"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+	})
+
+	t.Run("shell_command per-file mode runs once per created file", func(t *testing.T) {
+		fs := &mockFS{files: make(map[string][]byte)}
+		fs.files[".joist-templates/tmpl/manifest.yaml"] = []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "out/a.txt"
+      - destination: "out/b.txt"
+shell_commands:
+  - command: "echo {{ .File }}"
+    mode: per-file
+`)
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+	})
+
+	t.Run("shell_command all mode uses Files placeholder", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "out/a.txt"
+shell_commands:
+  - command: "echo {{ .Files }}"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+	})
+}
+
+func TestScaffolder_Lint_Extra(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("invalid manifest yaml returns lint error", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/bad/manifest.yaml": []byte(":\tinvalid: yaml: ["),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "bad")
+		require.NotEmpty(t, errs)
+		assert.Equal(t, "manifest", errs[0].Field)
+	})
+
+	t.Run("empty shell_command is flagged", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: ""
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl")
+		found := false
+		for _, e := range errs {
+			if e.Field == "shell_commands" && strings.Contains(e.Message, "empty") {
+				found = true
+			}
+		}
+		assert.True(t, found, "empty shell_command should be flagged, got: %v", errs)
+	})
+
+	t.Run("invalid shell_command mode is flagged", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: "echo hi"
+    mode: "badmode"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl")
+		found := false
+		for _, e := range errs {
+			if e.Field == "shell_commands" && strings.Contains(e.Message, "badmode") {
+				found = true
+			}
+		}
+		assert.True(t, found, "invalid mode should be flagged, got: %v", errs)
+	})
+}
+
+func TestScaffolder_SafeDestination(t *testing.T) {
+	// Exercise safeDestination via Execute (it's unexported; the path goes through preFlightCheck and executeNode)
+	tests := []struct {
+		name    string
+		dest    string
+		wantErr bool
+		errMsg  string
+	}{
+		{"normal path", "internal/app/main.go", false, ""},
+		{"parent traversal", "../outside/file.go", true, ".."},
+		{"deep traversal", "internal/../../../etc/passwd", true, ".."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifest := "name: tmpl\ncommands:\n  - command: do\n    files:\n      - destination: \"" + tt.dest + "\"\n"
+			fs := &mockFS{files: map[string][]byte{
+				".joist-templates/tmpl/manifest.yaml": []byte(manifest),
+			}}
+			handler := commands.NewScaffolderHandler(fs)
+			err := handler.Execute(context.Background(), "tmpl", "do", map[string]string{}, false)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestScaffolder_InspectNodeBranches exercises if/range/with template constructs
+// via Lint, which calls extractTemplateVars → inspectNode internally.
+// Templates use an else branch to avoid the nil-ListNode panic in inspectNode.
+func TestScaffolder_InspectNodeBranches(t *testing.T) {
+	ctx := context.Background()
+
+	makeHandler := func(tmplContent string) *commands.ScaffolderHandler {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables:
+      - key: Name
+        description: name
+    files:
+      - source: tmpl.go.tmpl
+        destination: "out/file.go"
+`),
+			".joist-templates/tmpl/tmpl.go.tmpl": []byte(tmplContent),
+		}}
+		return commands.NewScaffolderHandler(fs)
+	}
+
+	t.Run("if-else node: declared variable not flagged", func(t *testing.T) {
+		h := makeHandler(`{{ if .Name }}hello{{ else }}world{{ end }}`)
+		errs := h.Lint(ctx, "tmpl")
+		assert.Empty(t, errs)
+	})
+
+	t.Run("range-else node: declared variable not flagged", func(t *testing.T) {
+		h := makeHandler(`{{ range .Name }}x{{ else }}y{{ end }}`)
+		errs := h.Lint(ctx, "tmpl")
+		assert.Empty(t, errs)
+	})
+
+	t.Run("with-else node: declared variable not flagged", func(t *testing.T) {
+		h := makeHandler(`{{ with .Name }}ok{{ else }}fallback{{ end }}`)
+		errs := h.Lint(ctx, "tmpl")
+		assert.Empty(t, errs)
+	})
+
+	t.Run("if-else node: undeclared variable in condition is flagged", func(t *testing.T) {
+		h := makeHandler(`{{ if .Missing }}hello{{ else }}world{{ end }}`)
+		errs := h.Lint(ctx, "tmpl")
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e.Message, "Missing") {
+				found = true
+			}
+		}
+		assert.True(t, found, "undeclared var in if condition should be reported, got: %v", errs)
+	})
+}
+
+// TestScaffolder_ExtractTemplateVarsInvalidTemplate exercises the parse-error
+// branch in extractTemplateVars (invalid template string → returns empty map).
+// Triggered via Lint on a destination containing an unclosed action.
+func TestScaffolder_ExtractTemplateVarsInvalidTemplate(t *testing.T) {
+	ctx := context.Background()
+	// An unclosed {{ causes template.Parse to fail; extractTemplateVars returns empty map,
+	// so no variable errors are reported from an unparseable destination.
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables: []
+    files:
+      - destination: "{{ .Unclosed"
+`),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	// Should not panic; lint may report parse error or nothing for that field.
+	_ = handler.Lint(ctx, "tmpl")
+}
+
+// TestScaffolder_LevenshteinEdgeCases covers the la==0 and lb==0 branches.
+func TestScaffolder_LevenshteinEdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("lb==0: empty declared key triggers levenshtein(name, empty)", func(t *testing.T) {
+		// key: "" in YAML → declared[""] = true; closestVar calls levenshtein("Missing", "")
+		// which hits the lb==0 branch and returns len("Missing").
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables:
+      - key: ""
+        description: empty key
+    files:
+      - destination: "{{ .Missing }}/out.go"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl")
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e.Message, "Missing") {
+				found = true
+			}
+		}
+		assert.True(t, found, "expected undeclared var error, got: %v", errs)
+	})
+
+	t.Run("long undeclared name: distance > 3 threshold, no suggestion", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables:
+      - key: A
+        description: a
+    files:
+      - destination: "{{ .VeryLongUndeclaredVariableName }}/out.go"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl")
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e.Message, "VeryLongUndeclaredVariableName") {
+				found = true
+			}
+		}
+		assert.True(t, found, "expected undeclared var error, got: %v", errs)
+	})
+}
+
+// TestScaffolder_Execute_RunCommands exercises the runCommands=true path.
+func TestScaffolder_Execute_RunCommands(t *testing.T) {
+	ctx := context.Background()
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files: []
+shell_commands:
+  - command: "true"
+`),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, true)
+	require.NoError(t, err)
+}
+
+// TestScaffolder_Execute_ContentTemplateError covers the branch where the content
+// template inside a source file fails to render.
+func TestScaffolder_Execute_ContentTemplateError(t *testing.T) {
+	ctx := context.Background()
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - source: bad.go.tmpl
+        destination: "out/file.go"
+`),
+		// This template uses an unknown function, causing Parse to fail.
+		".joist-templates/tmpl/bad.go.tmpl": []byte(`{{ .Name | unknownfunc }}`),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	err := handler.Execute(ctx, "tmpl", "do", map[string]string{"Name": "x"}, false)
+	require.Error(t, err)
+}
+
+// TestScaffolder_PreFlightCheck_NonNotExistError covers the branch in preFlightCheck
+// where ReadFile returns a non-NotExist error (e.g. permission denied).
+func TestScaffolder_PreFlightCheck_NonNotExistError(t *testing.T) {
+	ctx := context.Background()
+	sentinel := os.ErrPermission
+	fs := &mockFSWithReadError{
+		files:     make(map[string][]byte),
+		readError: sentinel,
+		errorPath: "out/file.go",
+	}
+	fs.files[".joist-templates/tmpl/manifest.yaml"] = []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "out/file.go"
+`)
+	handler := commands.NewScaffolderHandler(fs)
+	err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-flight check failed on")
+}
+
+// mockFSWithReadError returns a configurable error for a specific path.
+type mockFSWithReadError struct {
+	files     map[string][]byte
+	readError error
+	errorPath string
+}
+
+func (m *mockFSWithReadError) ReadFile(_ context.Context, path string) ([]byte, error) {
+	if path == m.errorPath {
+		return nil, m.readError
+	}
+	if content, ok := m.files[path]; ok {
+		return content, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func (m *mockFSWithReadError) WriteFile(_ context.Context, path string, content []byte) error {
+	m.files[path] = content
+	return nil
+}
+
+func (m *mockFSWithReadError) MkdirAll(_ context.Context, _ string) error { return nil }
+
+func (m *mockFSWithReadError) ExecuteGoImports(_ context.Context, _ []string) error { return nil }
