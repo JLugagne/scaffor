@@ -334,7 +334,7 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 
 		// ListTemplates uses os.ReadDir, so we need actual dirs on disk
 		require.NoError(t, os.MkdirAll(".joist-templates/hexagonal", 0755))
-		t.Cleanup(func() { os.RemoveAll(".joist-templates") })
+		t.Cleanup(func() { _ = os.RemoveAll(".joist-templates") })
 
 		templates, err := handler.ListTemplates(ctx)
 		require.NoError(t, err)
@@ -348,7 +348,7 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 		handler := commands.NewScaffolderHandler(fs)
 
 		require.NoError(t, os.MkdirAll(".joist-templates/broken", 0755))
-		t.Cleanup(func() { os.RemoveAll(".joist-templates") })
+		t.Cleanup(func() { _ = os.RemoveAll(".joist-templates") })
 
 		templates, err := handler.ListTemplates(ctx)
 		require.NoError(t, err)
@@ -362,7 +362,7 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 		// Place a regular file where .joist-templates should be a directory;
 		// os.ReadDir on a file returns an error that is not os.IsNotExist.
 		require.NoError(t, os.WriteFile(".joist-templates", []byte("not a dir"), 0644))
-		t.Cleanup(func() { os.Remove(".joist-templates") })
+		t.Cleanup(func() { _ = os.Remove(".joist-templates") })
 
 		_, err := handler.ListTemplates(ctx)
 		require.Error(t, err)

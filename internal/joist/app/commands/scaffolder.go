@@ -298,8 +298,7 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 	visited := make(map[string]bool)
 	funcMap := getFuncMap()
 
-	var walk func(cmdName string) error
-	walk = func(cmdName string) error {
+	walk := func(cmdName string) error {
 		if visited[cmdName] {
 			return nil
 		}
