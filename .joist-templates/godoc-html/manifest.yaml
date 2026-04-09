@@ -1,0 +1,98 @@
+name: godoc-html
+description: |
+  Generates a self-contained HTML documentation site from Go source code.
+  Uses go-surgeon graph and symbol to extract code structure.
+
+  Produces a single-page or multi-page HTML doc site with:
+    - Dark/light theme toggle
+    - Sidebar navigation with package tree
+    - Collapsible symbol sections
+    - Syntax-highlighted code blocks
+    - Zero external dependencies (inline CSS/JS)
+
+  Demonstrates that go-surgeon scaffold can produce ANY text artifact,
+  not just Go source code. This template outputs pure HTML/CSS/JS.
+
+commands:
+  - command: init
+    description: Creates the full HTML documentation site skeleton
+    variables:
+      - key: ProjectName
+        description: Display name of the project
+      - key: ModulePath
+        description: Go module path
+      - key: AccentColor
+        description: Hex accent color for the theme (e.g. "4f46e5")
+    files:
+      - source: index.html.tmpl
+        destination: docs-html/index.html
+      - source: style.css.tmpl
+        destination: docs-html/style.css
+      - source: app.js.tmpl
+        destination: docs-html/app.js
+    post_commands:
+      - gen_package_page
+    hint: |
+      HTML documentation site created at docs-html/
+
+      NEXT STEPS for an AI agent:
+
+      1. Get the package list:
+         go-surgeon graph --summary
+
+      2. For each package, get symbols:
+         go-surgeon graph --symbols --dir <package_path>
+
+      3. For each symbol, get full details:
+         go-surgeon symbol <Name> --body
+
+      4. Insert the extracted data into docs-html/index.html:
+         - Add packages to the sidebar nav
+         - Add symbol sections to the main content
+         - Fill code blocks with signatures from symbol output
+
+      Haiku can do this — each step is: read output, paste into HTML template.
+
+  - command: gen_package_page
+    description: Creates a standalone HTML page template for individual packages
+    variables:
+      - key: ProjectName
+        description: Display name of the project
+      - key: AccentColor
+        description: Hex accent color
+    files:
+      - source: package.html.tmpl
+        destination: docs-html/packages/_template.html
+    hint: |
+      Package page template created at docs-html/packages/_template.html
+
+      For each package, an AI agent should:
+        1. Copy _template.html to <package_name>.html
+        2. Run: go-surgeon graph --symbols --dir <path>
+        3. For each symbol: go-surgeon symbol <n> --body
+        4. Replace the placeholder sections with real signatures and docs
+        5. No formatting needed — the CSS handles everything
+
+  - command: add_package
+    description: Creates a single package documentation HTML page
+    variables:
+      - key: ProjectName
+        description: Display name of the project
+      - key: PackageName
+        description: Name of the package
+      - key: PackagePath
+        description: Import path
+      - key: AccentColor
+        description: Hex accent color
+    files:
+      - source: single_package.html.tmpl
+        destination: docs-html/packages/{{ .PackageName }}.html
+    hint: |
+      Package page created at docs-html/packages/{{ .PackageName }}.html
+
+      FILL IT using go-surgeon:
+        go-surgeon graph --symbols --dir {{ .PackagePath }}
+        go-surgeon symbol <each_symbol> --body
+
+      Insert each symbol into the corresponding <section> in the HTML.
+      The page is self-contained — just open it in a browser.

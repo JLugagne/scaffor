@@ -109,12 +109,12 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 	funcMap := getFuncMap()
 
-	// postCmds accumulates resolved shell commands in order (mode + rendered string).
+	// shellCmds accumulates resolved shell commands in order (mode + rendered string).
 	type resolvedCmd struct {
 		mode    string // "all" or "per-file"
 		command string
 	}
-	var postCmds []resolvedCmd
+	var shellCmds []resolvedCmd
 
 	var executeNode func(cmdName string) error
 	executeNode = func(cmdName string) error {
@@ -180,21 +180,11 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 		executedCommands = append(executedCommands, cmdName)
 
-		// Collect post_commands (resolved against params, files resolved later)
-		for _, pc := range cmd.PostCommands {
-			cmdTmpl, err := template.New("postcmd").Funcs(funcMap).Parse(pc.Command)
-			if err != nil {
-				return fmt.Errorf("failed to parse post_command template %q: %w", pc.Command, err)
+		// Chain post_commands (other commands in this template, deduplicated)
+		for _, postCmd := range cmd.PostCommands {
+			if err := executeNode(postCmd); err != nil {
+				return err
 			}
-			var cmdBuf bytes.Buffer
-			if err := cmdTmpl.Execute(&cmdBuf, params); err != nil {
-				return fmt.Errorf("failed to render post_command template %q: %w", pc.Command, err)
-			}
-			mode := pc.Mode
-			if mode == "" {
-				mode = "all"
-			}
-			postCmds = append(postCmds, resolvedCmd{mode: mode, command: cmdBuf.String()})
 		}
 
 		return nil
@@ -216,64 +206,81 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 	fmt.Printf("SUCCESS: Executed %s/%s (%d commands, %d skipped)\n", templateName, commandName, len(executedCommands), skippedCount)
 
-	if len(postCmds) == 0 {
+	// Collect shell_commands from the template root (resolved against params)
+	for _, sc := range tmpl.ShellCommands {
+		cmdTmpl, err := template.New("shellcmd").Funcs(funcMap).Parse(sc.Command)
+		if err != nil {
+			return fmt.Errorf("failed to parse shell_command template %q: %w", sc.Command, err)
+		}
+		var cmdBuf bytes.Buffer
+		if err := cmdTmpl.Execute(&cmdBuf, params); err != nil {
+			return fmt.Errorf("failed to render shell_command template %q: %w", sc.Command, err)
+		}
+		mode := sc.Mode
+		if mode == "" {
+			mode = "all"
+		}
+		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String()})
+	}
+
+	if len(shellCmds) == 0 {
 		return nil
 	}
 
-	// Resolve per-file and all-files variants of each post_command.
+	// Resolve per-file and all-files variants of each shell_command.
 	// {{ .Files }} → space-joined list of all created files
 	// {{ .File }} → individual file (per-file mode only)
 	allFilesStr := strings.Join(createdFiles, " ")
 
-	type shellCmd struct {
+	type renderedCmd struct {
 		rendered string
 	}
-	var toRun []shellCmd
+	var toRun []renderedCmd
 
-	for _, pc := range postCmds {
-		switch pc.mode {
+	for _, sc := range shellCmds {
+		switch sc.mode {
 		case "per-file":
 			for _, f := range createdFiles {
 				data := map[string]string{"File": f, "Files": allFilesStr}
-				t, err := template.New("pcfile").Funcs(funcMap).Parse(pc.command)
+				t, err := template.New("scfile").Funcs(funcMap).Parse(sc.command)
 				if err != nil {
-					return fmt.Errorf("failed to parse per-file post_command %q: %w", pc.command, err)
+					return fmt.Errorf("failed to parse per-file shell_command %q: %w", sc.command, err)
 				}
 				var buf bytes.Buffer
 				if err := t.Execute(&buf, data); err != nil {
-					return fmt.Errorf("failed to render per-file post_command %q: %w", pc.command, err)
+					return fmt.Errorf("failed to render per-file shell_command %q: %w", sc.command, err)
 				}
-				toRun = append(toRun, shellCmd{rendered: buf.String()})
+				toRun = append(toRun, renderedCmd{rendered: buf.String()})
 			}
 		default: // "all"
 			data := map[string]string{"Files": allFilesStr}
-			t, err := template.New("pcall").Funcs(funcMap).Parse(pc.command)
+			t, err := template.New("scall").Funcs(funcMap).Parse(sc.command)
 			if err != nil {
-				return fmt.Errorf("failed to parse post_command %q: %w", pc.command, err)
+				return fmt.Errorf("failed to parse shell_command %q: %w", sc.command, err)
 			}
 			var buf bytes.Buffer
 			if err := t.Execute(&buf, data); err != nil {
-				return fmt.Errorf("failed to render post_command %q: %w", pc.command, err)
+				return fmt.Errorf("failed to render shell_command %q: %w", sc.command, err)
 			}
-			toRun = append(toRun, shellCmd{rendered: buf.String()})
+			toRun = append(toRun, renderedCmd{rendered: buf.String()})
 		}
 	}
 
 	if runCommands {
-		fmt.Printf("\nRunning post-commands:\n")
-		for _, sc := range toRun {
-			fmt.Printf("  $ %s\n", sc.rendered)
-			cmd := exec.CommandContext(ctx, "sh", "-c", sc.rendered)
+		fmt.Printf("\nRunning shell commands:\n")
+		for _, rc := range toRun {
+			fmt.Printf("  $ %s\n", rc.rendered)
+			cmd := exec.CommandContext(ctx, "sh", "-c", rc.rendered)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("post_command %q failed: %w", sc.rendered, err)
+				return fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
 			}
 		}
 	} else {
-		fmt.Printf("\nPost-commands to run:\n")
-		for _, sc := range toRun {
-			fmt.Printf("  %s\n", sc.rendered)
+		fmt.Printf("\nShell commands to run:\n")
+		for _, rc := range toRun {
+			fmt.Printf("  %s\n", rc.rendered)
 		}
 		fmt.Printf("\nRun with --run-commands to execute them automatically.\n")
 	}
@@ -341,6 +348,11 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 		tmpl.Name = templateName
 	}
 
+	cmdMap := make(map[string]domain.TemplateCommand)
+	for _, c := range tmpl.Commands {
+		cmdMap[c.Command] = c
+	}
+
 	var errs []domain.LintError
 
 	for _, cmd := range tmpl.Commands {
@@ -358,20 +370,13 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 			}
 		}
 
-		// Validate post_commands
-		for i, pc := range cmd.PostCommands {
-			if pc.Command == "" {
+		// Validate post_commands (must reference existing commands in this template)
+		for _, pc := range cmd.PostCommands {
+			if _, ok := cmdMap[pc]; !ok {
 				errs = append(errs, domain.LintError{
 					Command: cmd.Command,
 					Field:   "post_commands",
-					Message: fmt.Sprintf("post_command[%d] has an empty command", i),
-				})
-			}
-			if pc.Mode != "" && pc.Mode != "all" && pc.Mode != "per-file" {
-				errs = append(errs, domain.LintError{
-					Command: cmd.Command,
-					Field:   "post_commands",
-					Message: fmt.Sprintf("post_command[%d] has invalid mode %q (must be \"all\" or \"per-file\")", i, pc.Mode),
+					Message: fmt.Sprintf("references undefined command %q", pc),
 				})
 			}
 		}
@@ -419,6 +424,22 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string) []dom
 					errs = append(errs, undeclaredErr(v, "files.source:"+f.Source))
 				}
 			}
+		}
+	}
+
+	// Validate template-level shell_commands
+	for i, sc := range tmpl.ShellCommands {
+		if sc.Command == "" {
+			errs = append(errs, domain.LintError{
+				Field:   "shell_commands",
+				Message: fmt.Sprintf("shell_command[%d] has an empty command", i),
+			})
+		}
+		if sc.Mode != "" && sc.Mode != "all" && sc.Mode != "per-file" {
+			errs = append(errs, domain.LintError{
+				Field:   "shell_commands",
+				Message: fmt.Sprintf("shell_command[%d] has invalid mode %q (must be \"all\" or \"per-file\")", i, sc.Mode),
+			})
 		}
 	}
 

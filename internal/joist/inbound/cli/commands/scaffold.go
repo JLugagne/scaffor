@@ -79,6 +79,16 @@ the post_commands that will run after scaffolding.`,
 				for _, c := range tmpl.Commands {
 					fmt.Printf("  %s - %s\n", c.Command, c.Description)
 				}
+				if len(tmpl.ShellCommands) > 0 {
+					fmt.Println("\nShell commands (run after any execute):")
+					for _, sc := range tmpl.ShellCommands {
+						mode := sc.Mode
+						if mode == "" {
+							mode = "all"
+						}
+						fmt.Printf("  [%s] %s\n", mode, sc.Command)
+					}
+				}
 				fmt.Printf("\nRun 'joist doc %s <command>' for details.\n", tmpl.Name)
 				return nil
 			}
@@ -107,15 +117,12 @@ the post_commands that will run after scaffolding.`,
 			}
 
 			if len(targetCmd.PostCommands) > 0 {
-				fmt.Println("\n  Post-commands (run after scaffolding):")
+				fmt.Println("\n  Post-commands (chains to other template commands):")
 				for _, pc := range targetCmd.PostCommands {
-					mode := pc.Mode
-					if mode == "" {
-						mode = "all"
-					}
-					fmt.Printf("    [%s] %s\n", mode, pc.Command)
+					fmt.Printf("    → %s\n", pc)
 				}
 			}
+
 
 			return nil
 		},

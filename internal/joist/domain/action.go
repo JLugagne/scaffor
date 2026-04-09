@@ -3,9 +3,10 @@ package domain
 import "fmt"
 
 type Template struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Commands    []TemplateCommand `yaml:"commands"`
+	Name          string            `yaml:"name"`
+	Description   string            `yaml:"description"`
+	Commands      []TemplateCommand `yaml:"commands"`
+	ShellCommands []ShellCommand    `yaml:"shell_commands"`
 }
 
 type TemplateCommand struct {
@@ -13,7 +14,7 @@ type TemplateCommand struct {
 	Description  string             `yaml:"description"`
 	Variables    []TemplateVariable `yaml:"variables"`
 	Files        []TemplateFile     `yaml:"files"`
-	PostCommands []PostCommand      `yaml:"post_commands"`
+	PostCommands []string           `yaml:"post_commands"`
 	Hint         string             `yaml:"hint"`
 }
 
@@ -42,10 +43,10 @@ func (e LintError) Error() string {
 	return fmt.Sprintf("field %q: %s", e.Field, e.Message)
 }
 
-// PostCommand is a shell command to run after scaffolding files are written.
+// ShellCommand is a shell command to run after scaffolding files are written.
 // Mode "all" runs the command once with all created files ({{ .Files }}).
 // Mode "per-file" runs the command once per created file ({{ .File }}).
-type PostCommand struct {
+type ShellCommand struct {
 	Command string `yaml:"command"`
 	Mode    string `yaml:"mode"` // "all" or "per-file"
 }
