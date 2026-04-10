@@ -111,10 +111,11 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 	funcMap := getFuncMap()
 
-	// shellCmds accumulates resolved shell commands in order (mode + rendered string).
+	// shellCmds accumulates resolved shell commands in order (mode + rendered string + pattern).
 	type resolvedCmd struct {
 		mode    string // "all" or "per-file"
 		command string
+		pattern string
 	}
 	var shellCmds []resolvedCmd
 
@@ -226,7 +227,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		if mode == "" {
 			mode = "all"
 		}
-		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String()})
+		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String(), pattern: sc.Pattern})
 	}
 
 	if len(shellCmds) == 0 {
@@ -234,9 +235,8 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 
 	// Resolve per-file and all-files variants of each shell_command.
-	// {{ .Files }} → space-joined list of all created files
+	// {{ .Files }} → space-joined list of files matching the pattern
 	// {{ .File }} → individual file (per-file mode only)
-	allFilesStr := strings.Join(createdFiles, " ")
 
 	type renderedCmd struct {
 		rendered string
@@ -244,10 +244,25 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	var toRun []renderedCmd
 
 	for _, sc := range shellCmds {
+		// Filter files based on pattern (if specified)
+		var matchingFiles []string
+		for _, f := range createdFiles {
+			if matchesPattern(f, sc.pattern) {
+				matchingFiles = append(matchingFiles, f)
+			}
+		}
+
+		// Skip shell command if no files match the pattern
+		if len(matchingFiles) == 0 {
+			continue
+		}
+
+		matchingFilesStr := strings.Join(matchingFiles, " ")
+
 		switch sc.mode {
 		case "per-file":
-			for _, f := range createdFiles {
-				data := map[string]string{"File": f, "Files": allFilesStr}
+			for _, f := range matchingFiles {
+				data := map[string]string{"File": f, "Files": matchingFilesStr}
 				t, err := template.New("scfile").Funcs(funcMap).Parse(sc.command)
 				if err != nil {
 					return fmt.Errorf("failed to parse per-file shell_command %q: %w", sc.command, err)
@@ -259,7 +274,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 				toRun = append(toRun, renderedCmd{rendered: buf.String()})
 			}
 		default: // "all"
-			data := map[string]string{"Files": allFilesStr}
+			data := map[string]string{"Files": matchingFilesStr}
 			t, err := template.New("scall").Funcs(funcMap).Parse(sc.command)
 			if err != nil {
 				return fmt.Errorf("failed to parse shell_command %q: %w", sc.command, err)
@@ -374,17 +389,6 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			}
 		}
 
-		// Validate post_commands (must reference existing commands in this template)
-		for _, pc := range cmd.PostCommands {
-			if _, ok := cmdMap[pc]; !ok {
-				errs = append(errs, domain.LintError{
-					Command: cmd.Command,
-					Field:   "post_commands",
-					Message: fmt.Sprintf("references undefined command %q", pc),
-				})
-			}
-		}
-
 		// undeclaredErr builds an error for an undeclared variable, appending
 		// a "did you mean X?" suggestion when a close match exists.
 		undeclaredErr := func(varName, field string) domain.LintError {
@@ -397,8 +401,48 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			return domain.LintError{Command: cmd.Command, Field: field, Message: msg}
 		}
 
-		// Check variables used in destination paths
+		// Validate post_commands (must reference existing commands in this template)
+		for _, pc := range cmd.PostCommands {
+			if _, ok := cmdMap[pc]; !ok {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "post_commands",
+					Message: fmt.Sprintf("references undefined command %q", pc),
+				})
+			}
+		}
+
+		// Validate hint template syntax if present
+		if cmd.Hint != "" {
+			if _, err := template.New("").Funcs(getFuncMap()).Parse(cmd.Hint); err != nil {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "hint",
+					Message: fmt.Sprintf("hint has invalid template syntax: %v", err),
+				})
+			} else {
+				// Check variables used in hint
+				used := extractTemplateVars(cmd.Hint)
+				for v := range used {
+					if !declared[v] {
+						errs = append(errs, undeclaredErr(v, "hint"))
+					}
+				}
+			}
+		}
+
+		// Check variables used in destination paths and validate parsing
 		for _, f := range cmd.Files {
+			// Validate that the destination path parses as a template
+			if _, err := template.New("").Funcs(getFuncMap()).Parse(f.Destination); err != nil {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "files.destination",
+					Message: fmt.Sprintf("destination path %q has invalid template syntax: %v", f.Destination, err),
+				})
+				continue
+			}
+
 			used := extractTemplateVars(f.Destination)
 			for v := range used {
 				if !declared[v] {
@@ -407,7 +451,7 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			}
 		}
 
-		// Check variables used in template file source contents
+		// Check variables used in template file source contents and validate parsing
 		for _, f := range cmd.Files {
 			if f.Source == "" {
 				continue
@@ -422,6 +466,17 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 				})
 				continue
 			}
+
+			// Validate that the template file parses correctly
+			if _, err := template.New("").Funcs(getFuncMap()).Parse(string(data)); err != nil {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "files.source",
+					Message: fmt.Sprintf("template file %q has invalid syntax: %v", f.Source, err),
+				})
+				continue
+			}
+
 			used := extractTemplateVars(string(data))
 			for v := range used {
 				if !declared[v] {
@@ -438,12 +493,39 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 				Field:   "shell_commands",
 				Message: fmt.Sprintf("shell_command[%d] has an empty command", i),
 			})
+			continue
 		}
+
+		// Validate shell command template syntax
+		if _, err := template.New("").Funcs(getFuncMap()).Parse(sc.Command); err != nil {
+			errs = append(errs, domain.LintError{
+				Field:   "shell_commands",
+				Message: fmt.Sprintf("shell_command[%d] has invalid template syntax: %v", i, err),
+			})
+		}
+
 		if sc.Mode != "" && sc.Mode != "all" && sc.Mode != "per-file" {
 			errs = append(errs, domain.LintError{
 				Field:   "shell_commands",
 				Message: fmt.Sprintf("shell_command[%d] has invalid mode %q (must be \"all\" or \"per-file\")", i, sc.Mode),
 			})
+		}
+
+		// Validate pattern syntax if specified
+		if sc.Pattern != "" {
+			for _, pattern := range strings.Split(sc.Pattern, ",") {
+				pattern = strings.TrimSpace(pattern)
+				if pattern == "" {
+					continue
+				}
+				// Validate the pattern by trying to match against a dummy filename
+				if _, err := filepath.Match(pattern, ""); err != nil {
+					errs = append(errs, domain.LintError{
+						Field:   "shell_commands",
+						Message: fmt.Sprintf("shell_command[%d] has invalid pattern %q: %v", i, pattern, err),
+					})
+				}
+			}
 		}
 	}
 
@@ -553,6 +635,25 @@ func closestVar(name string, declared map[string]bool) (string, int) {
 		}
 	}
 	return best, bestDist
+}
+
+// matchesPattern checks if a file path matches any of the comma-separated glob patterns.
+// If patterns is empty, all files match (default behavior).
+func matchesPattern(filePath, patterns string) bool {
+	if patterns == "" {
+		return true
+	}
+
+	for _, pattern := range strings.Split(patterns, ",") {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		if matched, err := filepath.Match(pattern, filepath.Base(filePath)); err == nil && matched {
+			return true
+		}
+	}
+	return false
 }
 
 func detectPostCommandCycle(tmpl domain.Template) error {

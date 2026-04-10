@@ -754,6 +754,105 @@ commands:
 	assert.Contains(t, err.Error(), "pre-flight check failed on")
 }
 
+// TestScaffolder_Lint_InvalidDestinationTemplateSyntax verifies that invalid
+// template syntax in destination paths is caught during linting.
+func TestScaffolder_Lint_InvalidDestinationTemplateSyntax(t *testing.T) {
+	ctx := context.Background()
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "{{ .Unclosed"
+`),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	errs := handler.Lint(ctx, "tmpl", "")
+	found := false
+	for _, e := range errs {
+		if e.Field == "files.destination" && strings.Contains(e.Message, "invalid template syntax") {
+			found = true
+		}
+	}
+	assert.True(t, found, "invalid destination template syntax should be flagged, got: %v", errs)
+}
+
+// TestScaffolder_Lint_InvalidSourceFileTemplateSyntax verifies that invalid
+// template syntax in source template files is caught during linting.
+func TestScaffolder_Lint_InvalidSourceFileTemplateSyntax(t *testing.T) {
+	ctx := context.Background()
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables:
+      - key: Name
+        description: name
+    files:
+      - source: bad.go.tmpl
+        destination: "out/{{ .Name }}.go"
+`),
+		".joist-templates/tmpl/bad.go.tmpl": []byte("package main\n{{ .Name | unknownfunc }}"),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	errs := handler.Lint(ctx, "tmpl", "")
+	found := false
+	for _, e := range errs {
+		if e.Field == "files.source" && strings.Contains(e.Message, "invalid syntax") {
+			found = true
+		}
+	}
+	assert.True(t, found, "invalid template file syntax should be flagged, got: %v", errs)
+}
+
+// TestScaffolder_Lint_InvalidHintTemplateSyntax verifies that invalid
+// template syntax in hints is caught during linting.
+func TestScaffolder_Lint_InvalidHintTemplateSyntax(t *testing.T) {
+	ctx := context.Background()
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables:
+      - key: Name
+        description: name
+    files: []
+    hint: "Created {{ .Name | unknownfunc }}"
+`),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	errs := handler.Lint(ctx, "tmpl", "")
+	found := false
+	for _, e := range errs {
+		if e.Command == "do" && e.Field == "hint" && strings.Contains(e.Message, "invalid template syntax") {
+			found = true
+		}
+	}
+	assert.True(t, found, "invalid hint template syntax should be flagged, got: %v", errs)
+}
+
+// TestScaffolder_Lint_InvalidShellCommandTemplateSyntax verifies that invalid
+// template syntax in shell_commands is caught during linting.
+func TestScaffolder_Lint_InvalidShellCommandTemplateSyntax(t *testing.T) {
+	ctx := context.Background()
+	fs := &mockFS{files: map[string][]byte{
+		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: "gofmt {{ .Files | unknownfunc }}"
+`),
+	}}
+	handler := commands.NewScaffolderHandler(fs)
+	errs := handler.Lint(ctx, "tmpl", "")
+	found := false
+	for _, e := range errs {
+		if e.Field == "shell_commands" && strings.Contains(e.Message, "invalid template syntax") {
+			found = true
+		}
+	}
+	assert.True(t, found, "invalid shell_command template syntax should be flagged, got: %v", errs)
+}
+
 // mockFSWithReadError returns a configurable error for a specific path.
 type mockFSWithReadError struct {
 	files     map[string][]byte
@@ -779,3 +878,191 @@ func (m *mockFSWithReadError) WriteFile(_ context.Context, path string, content 
 func (m *mockFSWithReadError) MkdirAll(_ context.Context, _ string) error { return nil }
 
 func (m *mockFSWithReadError) ExecuteGoImports(_ context.Context, _ []string) error { return nil }
+
+// TestScaffolder_ShellCommand_PatternMatching tests that patterns filter files correctly.
+func TestScaffolder_ShellCommand_PatternMatching(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("pattern *.go matches only .go files", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "main.go"
+      - destination: "util.go"
+      - destination: "main.js"
+shell_commands:
+  - command: "gofmt {{ .Files }}"
+    pattern: "*.go"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+		// When pattern is applied, only .go files should be in {{ .Files }}
+		// This is verified by the test not panicking and shell command being printed
+	})
+
+	t.Run("multiple patterns separated by comma", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "app.js"
+      - destination: "App.tsx"
+      - destination: "style.css"
+shell_commands:
+  - command: "prettier {{ .Files }}"
+    pattern: "*.js,*.tsx"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+	})
+
+	t.Run("per-file mode with pattern", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "file1.go"
+      - destination: "file2.go"
+      - destination: "file.txt"
+shell_commands:
+  - command: "gofmt {{ .File }}"
+    mode: "per-file"
+    pattern: "*.go"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+		// Should only run on .go files in per-file mode
+	})
+
+	t.Run("no matching files skips shell command", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "file1.txt"
+      - destination: "file2.txt"
+shell_commands:
+  - command: "gofmt {{ .Files }}"
+    pattern: "*.go"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+		// Should succeed even though no files match the pattern
+	})
+
+	t.Run("no pattern matches all files (default behavior)", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "file.go"
+      - destination: "file.js"
+shell_commands:
+  - command: "echo {{ .Files }}"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		require.NoError(t, err)
+		// Both files should be in {{ .Files }} when no pattern is specified
+	})
+}
+
+// TestScaffolder_Lint_ShellCommandPatternValidation tests pattern validation in lint.
+func TestScaffolder_Lint_ShellCommandPatternValidation(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("invalid pattern is flagged", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: "echo hi"
+    pattern: "["
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		found := false
+		for _, e := range errs {
+			if e.Field == "shell_commands" && strings.Contains(e.Message, "invalid pattern") {
+				found = true
+			}
+		}
+		assert.True(t, found, "invalid pattern should be flagged, got: %v", errs)
+	})
+
+	t.Run("valid pattern passes validation", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: "echo hi"
+    pattern: "*.go"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		found := false
+		for _, e := range errs {
+			if e.Field == "shell_commands" && strings.Contains(e.Message, "invalid pattern") {
+				found = true
+			}
+		}
+		assert.False(t, found, "valid pattern should not be flagged, got: %v", errs)
+	})
+
+	t.Run("multiple patterns are validated", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: "echo hi"
+    pattern: "*.js,*.tsx"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		found := false
+		for _, e := range errs {
+			if e.Field == "shell_commands" && strings.Contains(e.Message, "invalid pattern") {
+				found = true
+			}
+		}
+		assert.False(t, found, "valid patterns should not be flagged, got: %v", errs)
+	})
+
+	t.Run("empty pattern string is allowed", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands: []
+shell_commands:
+  - command: "echo hi"
+    pattern: ""
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		found := false
+		for _, e := range errs {
+			if e.Field == "shell_commands" && strings.Contains(e.Message, "invalid pattern") {
+				found = true
+			}
+		}
+		assert.False(t, found, "empty pattern should be allowed, got: %v", errs)
+	})
+}

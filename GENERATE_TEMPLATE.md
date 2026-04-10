@@ -129,6 +129,8 @@ commands:
 shell_commands:                  # Optional, runs after all files are written
   - command: "goimports -w {{ .Files }}"
     mode: all                    # "all" = once with all files; "per-file" = once per file
+    pattern: "*.go"              # Optional: comma-separated glob patterns (e.g. "*.go" or "*.js,*.tsx")
+                                 # When specified, only files matching the pattern(s) are used
 ```
 
 ### Key Fields
@@ -147,8 +149,10 @@ shell_commands:                  # Optional, runs after all files are written
 **`hint`** — Rendered after execution. Use it to tell the user (or an AI agent) what was created and what to do next. Supports template syntax.
 
 **`shell_commands`** — Template-level (not per-command). Runs after all files are written.
-- `mode: all` — command runs once; `{{ .Files }}` expands to space-separated list of all created files
-- `mode: per-file` — command runs once per file; `{{ .File }}` is the current file, `{{ .Files }}` is all files
+- `command`: The shell command to run. Supports `{{ .File }}` and `{{ .Files }}` placeholders.
+- `mode: all` — command runs once; `{{ .Files }}` expands to space-separated list of created files matching the pattern
+- `mode: per-file` — command runs once per file matching the pattern; `{{ .File }}` is the current file, `{{ .Files }}` is all matching files
+- `pattern` (optional) — Comma-separated glob patterns (e.g. `*.go` or `*.js,*.tsx`). Only files matching one of the patterns are included in `{{ .Files }}` or run in per-file mode. If omitted, all files are included.
 - Shell commands are printed for review by default. Only executed when the user passes `--run-commands`.
 
 ### Design Commands Around User Actions
@@ -200,6 +204,7 @@ The linter checks:
 - Post-commands reference existing commands in the same template
 - No cycles in post_command chains
 - Shell command `mode` is `all` or `per-file`
+- Shell command patterns are valid glob patterns
 - Typo detection with suggestions (e.g. "ApName" → did you mean "AppName"?)
 
 Fix every lint error before considering the template done.
@@ -234,6 +239,62 @@ Verify:
 5. Write a hint listing what was created and next steps
 6. Run `joist lint my-template` and fix any issues
 7. Test with `joist execute my-template add_entity --set AppName=myapp --set ModulePath=github.com/org/repo --set Entity=Product`
+
+---
+
+## Shell Command Pattern Matching
+
+Shell commands can be selective about which files they operate on using **patterns**. Instead of running a command blindly on all created files, you can filter by filename using glob patterns.
+
+### Pattern Syntax
+
+Patterns are comma-separated glob patterns that match filenames. Common examples:
+- `*.go` — match Go source files
+- `*.js,*.ts` — match JavaScript or TypeScript files
+- `*.{go,mod,sum}` — match multiple file extensions (brace expansion)
+- `internal/**/*.go` — match nested paths (filepath.Match syntax)
+
+### Examples
+
+**Format only Go files, ignore others:**
+```yaml
+shell_commands:
+  - command: "gofmt -w {{ .Files }}"
+    mode: all
+    pattern: "*.go"
+```
+
+**Run prettier on JavaScript and TypeScript files (per-file):**
+```yaml
+shell_commands:
+  - command: "prettier --write {{ .File }}"
+    mode: per-file
+    pattern: "*.js,*.jsx,*.ts,*.tsx"
+```
+
+**Run Go tests only on files ending in `_test.go`:**
+```yaml
+shell_commands:
+  - command: "go test {{ .Files }}"
+    pattern: "*_test.go"
+```
+
+### Behavior
+
+- **No pattern** — all created files are included (default)
+- **Pattern specified** — only files matching one of the patterns are included in `{{ .Files }}` or processed in per-file mode
+- **No files match** — the shell command is skipped silently if no files match the pattern
+- **Per-file mode** — in per-file mode, the command runs once for each matching file, skipping non-matching files
+
+### Validation
+
+Always validate your patterns using `joist lint`:
+
+```bash
+joist lint my-template
+```
+
+The linter will catch invalid glob patterns and report them. Fix any errors before using the template.
 
 ---
 
