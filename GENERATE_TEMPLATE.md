@@ -128,9 +128,8 @@ commands:
 
 shell_commands:                  # Optional, runs after all files are written
   - command: "goimports -w {{ .Files }}"
-    mode: all                    # "all" = once with all files; "per-file" = once per file
-    pattern: "*.go"              # Optional: comma-separated glob patterns (e.g. "*.go" or "*.js,*.tsx")
-                                 # When specified, only files matching the pattern(s) are used
+    mode: all                    # "all" (default) or "per-file"
+    pattern: "*.go"              # Optional: comma-separated glob patterns
 ```
 
 ### Key Fields
@@ -150,10 +149,36 @@ shell_commands:                  # Optional, runs after all files are written
 
 **`shell_commands`** — Template-level (not per-command). Runs after all files are written.
 - `command`: The shell command to run. Supports `{{ .File }}` and `{{ .Files }}` placeholders.
-- `mode: all` — command runs once; `{{ .Files }}` expands to space-separated list of created files matching the pattern
-- `mode: per-file` — command runs once per file matching the pattern; `{{ .File }}` is the current file, `{{ .Files }}` is all matching files
-- `pattern` (optional) — Comma-separated glob patterns (e.g. `*.go` or `*.js,*.tsx`). Only files matching one of the patterns are included in `{{ .Files }}` or run in per-file mode. If omitted, all files are included.
+- `mode`: Execution strategy.
+  - `all` (default) — runs once; `{{ .Files }}` expands to space-separated list of matching files.
+  - `per-file` — runs once per matching file; `{{ .File }}` is the current file.
+- `pattern` (optional) — Comma-separated glob patterns to filter which created files the command operates on. Examples: `*.go`, `*.js,*.tsx`, `*_test.go`. If omitted, all created files are included.
+  - Patterns match against the **filename** (not the full path).
+  - If no files match, the shell command is skipped silently.
 - Shell commands are printed for review by default. Only executed when the user passes `--run-commands`.
+
+#### Shell command examples
+
+Format only Go files:
+```yaml
+shell_commands:
+  - command: "gofmt -w {{ .Files }}"
+    pattern: "*.go"
+```
+
+Run prettier per-file on JS/TS:
+```yaml
+shell_commands:
+  - command: "prettier --write {{ .File }}"
+    mode: per-file
+    pattern: "*.js,*.jsx,*.ts,*.tsx"
+```
+
+Run on all files (default when no pattern):
+```yaml
+shell_commands:
+  - command: "echo {{ .Files }}"
+```
 
 ### Design Commands Around User Actions
 
@@ -191,7 +216,7 @@ hint: |
 
 ## Step 6: Validate with Lint
 
-After writing the template, run:
+**IMPORTANT: Always run the linter before considering a template done.**
 
 ```bash
 joist lint <template-name>
@@ -199,12 +224,13 @@ joist lint <template-name>
 
 The linter checks:
 
+- All `.tmpl` files, destination paths, hints, and shell commands parse as valid Go text/templates
 - Variable keys start with uppercase
-- All variables used in destinations and `.tmpl` files are declared
+- All variables used in destinations, `.tmpl` files, and hints are declared
 - Post-commands reference existing commands in the same template
 - No cycles in post_command chains
 - Shell command `mode` is `all` or `per-file`
-- Shell command patterns are valid glob patterns
+- Shell command `pattern` values are valid glob patterns
 - Typo detection with suggestions (e.g. "ApName" → did you mean "AppName"?)
 
 Fix every lint error before considering the template done.
@@ -242,62 +268,6 @@ Verify:
 
 ---
 
-## Shell Command Pattern Matching
-
-Shell commands can be selective about which files they operate on using **patterns**. Instead of running a command blindly on all created files, you can filter by filename using glob patterns.
-
-### Pattern Syntax
-
-Patterns are comma-separated glob patterns that match filenames. Common examples:
-- `*.go` — match Go source files
-- `*.js,*.ts` — match JavaScript or TypeScript files
-- `*.{go,mod,sum}` — match multiple file extensions (brace expansion)
-- `internal/**/*.go` — match nested paths (filepath.Match syntax)
-
-### Examples
-
-**Format only Go files, ignore others:**
-```yaml
-shell_commands:
-  - command: "gofmt -w {{ .Files }}"
-    mode: all
-    pattern: "*.go"
-```
-
-**Run prettier on JavaScript and TypeScript files (per-file):**
-```yaml
-shell_commands:
-  - command: "prettier --write {{ .File }}"
-    mode: per-file
-    pattern: "*.js,*.jsx,*.ts,*.tsx"
-```
-
-**Run Go tests only on files ending in `_test.go`:**
-```yaml
-shell_commands:
-  - command: "go test {{ .Files }}"
-    pattern: "*_test.go"
-```
-
-### Behavior
-
-- **No pattern** — all created files are included (default)
-- **Pattern specified** — only files matching one of the patterns are included in `{{ .Files }}` or processed in per-file mode
-- **No files match** — the shell command is skipped silently if no files match the pattern
-- **Per-file mode** — in per-file mode, the command runs once for each matching file, skipping non-matching files
-
-### Validation
-
-Always validate your patterns using `joist lint`:
-
-```bash
-joist lint my-template
-```
-
-The linter will catch invalid glob patterns and report them. Fix any errors before using the template.
-
----
-
 ## Common Pitfalls
 
 - **Forgetting to declare a variable** — every `{{ .Something }}` in a destination path, `.tmpl` file, or hint must have a matching entry in `variables`. The linter catches this.
@@ -305,3 +275,4 @@ The linter will catch invalid glob patterns and report them. Fix any errors befo
 - **Over-templating** — don't replace constants with variables. If every entity lives under `internal/`, leave `internal/` hardcoded.
 - **Path traversal** — destinations containing `..` are rejected. All paths must be relative and downward.
 - **Existing files** — execution aborts if any destination file already exists (pre-flight check). This prevents accidental overwrites.
+- **Skipping the linter** — always run `joist lint <template-name>` after writing or modifying a template. It catches syntax errors, undeclared variables, invalid patterns, and typos before execution.
