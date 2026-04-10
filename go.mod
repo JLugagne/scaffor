@@ -1,6 +1,6 @@
 module github.com/JLugagne/joist
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/spf13/cobra v1.10.2
