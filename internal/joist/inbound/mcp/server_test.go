@@ -13,10 +13,9 @@ import (
 
 // mockScaffolder is a test double for service.ScaffolderCommands.
 type mockScaffolder struct {
-	templates    []domain.Template
-	executeErr   error
-	executeFiles []string // files "created" during Execute, written via params for verification
-	lintErrors   []domain.LintError
+	templates  []domain.Template
+	executeErr error
+	lintErrors []domain.LintError
 }
 
 func (m *mockScaffolder) ListTemplates(_ context.Context) ([]domain.Template, error) {
@@ -57,12 +56,12 @@ func connectTestServer(t *testing.T, scaffolder *mockScaffolder) *sdkmcp.ClientS
 
 	ss, err := server.Connect(ctx, sTransport, nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { ss.Close() })
+	t.Cleanup(func() { _ = ss.Close() })
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
 	cs, err := client.Connect(ctx, cTransport, nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { cs.Close() })
+	t.Cleanup(func() { _ = cs.Close() })
 
 	return cs
 }

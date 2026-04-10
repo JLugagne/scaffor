@@ -314,10 +314,10 @@ func captureStdout(fn func() error) (string, error) {
 
 	fnErr := fn()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = orig
 
 	out, _ := io.ReadAll(r)
-	r.Close()
+	_ = r.Close()
 	return string(out), fnErr
 }
