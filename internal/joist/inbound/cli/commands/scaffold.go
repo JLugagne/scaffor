@@ -215,9 +215,10 @@ Post-commands support two modes:
 
 func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 	var templateDir string
+	var lintAll bool
 
 	cmd := &cobra.Command{
-		Use:   "lint <template>",
+		Use:   "lint [template]",
 		Short: "Lint a template manifest for issues",
 		Long: `Validate a template manifest and report any issues.
 
@@ -229,10 +230,50 @@ Checks include:
   joist lint service
 
   # Lint a template in a custom directory
-  joist lint -d my-templates service`,
-		Args: cobra.ExactArgs(1),
+  joist lint -d my-templates service
+
+  # Lint all templates
+  joist lint --all`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("all") {
+				return cobra.MaximumNArgs(0)(cmd, args)
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+
+			if lintAll {
+				templates, err := scaffolder.ListTemplates(ctx)
+				if err != nil {
+					return fmt.Errorf("listing templates: %w", err)
+				}
+
+				totalIssues := 0
+				failedTemplates := 0
+				for _, t := range templates {
+					errs := scaffolder.Lint(ctx, t.Name, templateDir)
+					if len(errs) == 0 {
+						fmt.Printf("OK: %s has no issues\n", t.Name)
+						continue
+					}
+
+					failedTemplates++
+					fmt.Printf("LINT ERRORS in %s:\n\n", t.Name)
+					for _, e := range errs {
+						fmt.Printf("  %s\n", e.Error())
+					}
+					fmt.Println()
+					totalIssues += len(errs)
+				}
+
+				if totalIssues > 0 {
+					return fmt.Errorf("lint failed: %d issue(s) in %d template(s)", totalIssues, failedTemplates)
+				}
+				fmt.Printf("\nAll %d template(s) OK\n", len(templates))
+				return nil
+			}
+
 			templateName := args[0]
 
 			errs := scaffolder.Lint(ctx, templateName, templateDir)
@@ -251,5 +292,6 @@ Checks include:
 	}
 
 	cmd.Flags().StringVarP(&templateDir, "dir", "d", "", "Directory containing templates (default: .joist-templates)")
+	cmd.Flags().BoolVar(&lintAll, "all", false, "Lint all templates in the directory")
 	return cmd
 }
