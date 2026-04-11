@@ -130,8 +130,8 @@ commands:
         on_conflict: default                 # "default", "skip", or "force" (optional)
     post_commands:
       - other_command_name       # Chain to another command in this template
-    shell_commands:              # Optional, per-command shell commands
-      - "goimports -w internal/{{ .AppName | lower }}/domain/{{ .Entity | lower }}.go"
+    shell_commands:              # Optional, per-command shell commands (same format as template-level)
+      - command: "goimports -w internal/{{ .AppName | lower }}/domain/{{ .Entity | lower }}.go"
     hint: |
       Message printed after execution.
       Supports {{ .Variables }} too.
@@ -162,7 +162,7 @@ shell_commands:                  # Optional, template-level, runs after all file
 
 **`post_commands`** — List of other command names in the same template to execute after this one. Executed depth-first. No cycles allowed.
 
-**`shell_commands`** (per-command) — List of shell command strings to run after this command's files are written. Each string is rendered with the command's variables (same `{{ .Var }}` syntax as files and hints — no `{{ .File }}`/`{{ .Files }}`). Useful for formatting, code generation, or any post-processing specific to a command.
+**`shell_commands`** (per-command) — Same format as template-level `shell_commands` (with `command`, `mode`, `pattern` fields), but rendered with the command's variables instead of `{{ .File }}`/`{{ .Files }}`. Runs after this command's files are written. Useful for formatting, code generation, or any post-processing specific to a command.
 
 **`hint`** — Rendered after execution. Use it to tell the user (or an AI agent) what was created and what to do next. Supports template syntax.
 

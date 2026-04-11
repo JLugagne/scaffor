@@ -154,7 +154,11 @@ func writeCommandDetail(sb *strings.Builder, cmd domain.TemplateCommand) {
 	if len(cmd.ShellCommands) > 0 {
 		sb.WriteString("\n  Shell commands:\n")
 		for _, sc := range cmd.ShellCommands {
-			fmt.Fprintf(sb, "    $ %s\n", sc)
+			mode := sc.Mode
+			if mode == "" {
+				mode = "all"
+			}
+			fmt.Fprintf(sb, "    [%s] $ %s\n", mode, sc.Command)
 		}
 	}
 }

@@ -15,7 +15,7 @@ type TemplateCommand struct {
 	Variables     []TemplateVariable `yaml:"variables"`
 	Files         []TemplateFile     `yaml:"files"`
 	PostCommands  []string           `yaml:"post_commands"`
-	ShellCommands []string           `yaml:"shell_commands"`
+	ShellCommands []ShellCommand     `yaml:"shell_commands"`
 	Hint          string             `yaml:"hint"`
 }
 

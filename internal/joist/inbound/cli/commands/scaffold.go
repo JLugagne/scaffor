@@ -71,7 +71,11 @@ func printCommandDetail(cmd domain.TemplateCommand) {
 	if len(cmd.ShellCommands) > 0 {
 		fmt.Println("\n  Shell commands:")
 		for _, sc := range cmd.ShellCommands {
-			fmt.Printf("    $ %s\n", sc)
+			mode := sc.Mode
+			if mode == "" {
+				mode = "all"
+			}
+			fmt.Printf("    [%s] $ %s\n", mode, sc.Command)
 		}
 	}
 }

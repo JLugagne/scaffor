@@ -224,13 +224,13 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 		// Resolve per-command shell_commands with the same params as files/hints.
 		for _, sc := range cmd.ShellCommands {
-			t, err := template.New("cmdshell").Funcs(funcMap).Parse(sc)
+			t, err := template.New("cmdshell").Funcs(funcMap).Parse(sc.Command)
 			if err != nil {
-				return fmt.Errorf("failed to parse command shell_command %q: %w", sc, err)
+				return fmt.Errorf("failed to parse command shell_command %q: %w", sc.Command, err)
 			}
 			var buf bytes.Buffer
 			if err := t.Execute(&buf, params); err != nil {
-				return fmt.Errorf("failed to render command shell_command %q: %w", sc, err)
+				return fmt.Errorf("failed to render command shell_command %q: %w", sc.Command, err)
 			}
 			cmdShellCmds = append(cmdShellCmds, buf.String())
 		}
@@ -557,15 +557,15 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 
 		// Validate per-command shell_commands
 		for i, sc := range cmd.ShellCommands {
-			if sc == "" {
+			if sc.Command == "" {
 				errs = append(errs, domain.LintError{
 					Command: cmd.Command,
 					Field:   "shell_commands",
-					Message: fmt.Sprintf("shell_command[%d] is empty", i),
+					Message: fmt.Sprintf("shell_command[%d] has an empty command", i),
 				})
 				continue
 			}
-			if _, err := template.New("").Funcs(getFuncMap()).Parse(sc); err != nil {
+			if _, err := template.New("").Funcs(getFuncMap()).Parse(sc.Command); err != nil {
 				errs = append(errs, domain.LintError{
 					Command: cmd.Command,
 					Field:   "shell_commands",
@@ -573,10 +573,32 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 				})
 				continue
 			}
-			scUsed := extractTemplateVars(sc)
+			scUsed := extractTemplateVars(sc.Command)
 			for v := range scUsed {
 				if !declared[v] {
 					errs = append(errs, undeclaredErr(v, "shell_commands"))
+				}
+			}
+			if sc.Mode != "" && sc.Mode != "all" && sc.Mode != "per-file" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "shell_commands",
+					Message: fmt.Sprintf("shell_command[%d] has invalid mode %q (must be \"all\" or \"per-file\")", i, sc.Mode),
+				})
+			}
+			if sc.Pattern != "" {
+				for _, pattern := range strings.Split(sc.Pattern, ",") {
+					pattern = strings.TrimSpace(pattern)
+					if pattern == "" {
+						continue
+					}
+					if _, err := filepath.Match(pattern, ""); err != nil {
+						errs = append(errs, domain.LintError{
+							Command: cmd.Command,
+							Field:   "shell_commands",
+							Message: fmt.Sprintf("shell_command[%d] has invalid pattern %q: %v", i, pattern, err),
+						})
+					}
 				}
 			}
 		}
