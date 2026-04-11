@@ -43,6 +43,7 @@ Use "joist <command> --help" for details on any command.`,
 			clicommands.NewExecuteCommand(scaffolderHandler),
 			clicommands.NewLintCommand(scaffolderHandler),
 			clicommands.NewMCPCommand(scaffolderHandler),
+			clicommands.NewTestCommand(scaffolderHandler),
 		)
 
 		rootCmd.SetArgs(args)

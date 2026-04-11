@@ -307,3 +307,7 @@ func TestMCP_Lint_All_WithErrors(t *testing.T) {
 	assert.Contains(t, text, "LINT ERRORS in handler")
 	assert.Contains(t, text, "issue(s) found across 2 template(s)")
 }
+
+func (m *mockScaffolder) Test(_ context.Context, _ string) error {
+	return nil
+}

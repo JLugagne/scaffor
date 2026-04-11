@@ -14,6 +14,7 @@ import (
 
 	"github.com/JLugagne/joist/internal/joist/domain"
 	"github.com/JLugagne/joist/internal/joist/domain/repositories/filesystem"
+	outboundfs "github.com/JLugagne/joist/internal/joist/outbound/filesystem"
 	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 )
@@ -843,6 +844,117 @@ func detectPostCommandCycle(tmpl domain.Template) error {
 		if !visited[c.Command] {
 			if dfs(c.Command) {
 				return fmt.Errorf("cycle detected in post_commands for template %q", tmpl.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error {
+	tmpl, err := h.GetTemplate(ctx, templateName)
+	if err != nil {
+		return err
+	}
+
+	if len(tmpl.Test) == 0 {
+		return fmt.Errorf("template %q has no test block defined", templateName)
+	}
+
+	// Create temp directory
+	tmpDir, err := os.MkdirTemp("", "joist-test-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Copy .joist-templates/<template>/ into the temp dir
+	srcDir := filepath.Join(".joist-templates", templateName)
+	dstDir := filepath.Join(tmpDir, ".joist-templates", templateName)
+	if err := copyDir(srcDir, dstDir); err != nil {
+		return fmt.Errorf("failed to copy template to temp dir: %w", err)
+	}
+
+	// Save original working directory and change to temp dir
+	origDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		return fmt.Errorf("failed to change to temp directory: %w", err)
+	}
+	defer os.Chdir(origDir)
+
+	// Create a new handler with a real filesystem for the temp dir
+	tmpFS := outboundfs.NewFileSystem()
+	tmpHandler := NewScaffolderHandler(tmpFS)
+
+	// Build set of all command names in the manifest
+	allCommands := make(map[string]bool)
+	for _, c := range tmpl.Commands {
+		allCommands[c.Command] = true
+	}
+
+	// Execute each test step
+	exercised := make(map[string]bool)
+	for _, step := range tmpl.Test {
+		fmt.Printf("[test] Executing %s/%s...\n", templateName, step.Command)
+		params := step.Params
+		if params == nil {
+			params = map[string]string{}
+		}
+		_, err := tmpHandler.Execute(ctx, templateName, step.Command, params, domain.ExecuteOptions{Force: true})
+		if err != nil {
+			return fmt.Errorf("test step %q failed: %w", step.Command, err)
+		}
+		exercised[step.Command] = true
+	}
+
+	// Run validation commands
+	for _, cmd := range tmpl.Validate {
+		fmt.Printf("[validate] Running: %s\n", cmd)
+		c := exec.CommandContext(ctx, "sh", "-c", cmd)
+		c.Dir = tmpDir
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		if err := c.Run(); err != nil {
+			return fmt.Errorf("validation command %q failed: %w", cmd, err)
+		}
+	}
+
+	// Print coverage
+	n := len(exercised)
+	m := len(allCommands)
+	pct := 0
+	if m > 0 {
+		pct = n * 100 / m
+	}
+	fmt.Printf("%d of %d commands exercised (%d%%)\n", n, m, pct)
+
+	return nil
+}
+
+func copyDir(src, dst string) error {
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(dstPath, data, 0644); err != nil {
+				return err
 			}
 		}
 	}

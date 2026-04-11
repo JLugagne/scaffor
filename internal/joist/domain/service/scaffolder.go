@@ -11,4 +11,5 @@ type ScaffolderCommands interface {
 	GetTemplate(ctx context.Context, templateName string) (domain.Template, error)
 	Execute(ctx context.Context, templateName, commandName string, params map[string]string, opts domain.ExecuteOptions) ([]domain.FileEvent, error)
 	Lint(ctx context.Context, templateName string, templateDir string) []domain.LintError
+	Test(ctx context.Context, templateName string) error
 }

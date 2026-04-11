@@ -59,6 +59,7 @@ Workflow:
   doc(template, command)        → get the exact variables for one command
   execute(template, command, …) → scaffold the files
   lint(template)                → validate a manifest after editing it
+  test(template)                → run the template's test block in a temp directory
   status                        → review the session log of all tool calls and file events
 
 Status: every tool call is logged to a .joist/<session-id>.jsonl file for the duration of
@@ -70,6 +71,7 @@ which files were created, overwritten, or skipped during execute calls.`,
 	registerDocTemplate(server, scaffolder, session)
 	registerExecuteTemplate(server, scaffolder, session)
 	registerLintTemplate(server, scaffolder, session)
+	registerTestTemplate(server, scaffolder, session)
 	registerStatus(server, session)
 
 	return server
@@ -428,4 +430,85 @@ func captureStdout(fn func() error) (string, error) {
 	out, _ := io.ReadAll(r)
 	_ = r.Close()
 	return string(out), fnErr
+}
+
+func registerTestTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+	type testInput struct {
+		Template string `json:"template,omitempty" jsonschema:"name of the template to test; required unless all is true"`
+		All      bool   `json:"all,omitempty" jsonschema:"when true, test every template that has a test block"`
+	}
+
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name: "test",
+		Description: `Execute a template's test block in a temporary directory and run validation commands.
+
+Each template can define a test block (list of commands with params to execute in order)
+and a validate block (list of shell commands that must exit 0). This tool runs them in a
+fresh temp directory to verify the template produces valid output.
+
+Pass all=true to test every template that has a test block defined.`,
+	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args testInput) (*sdkmcp.CallToolResult, any, error) {
+		logCall(session, "test", map[string]any{"template": args.Template, "all": args.All}, nil)
+
+		if !args.All {
+			if args.Template == "" {
+				return errResult("template is required when all is false"), nil, nil
+			}
+			out, err := captureStdout(func() error {
+				return scaffolder.Test(ctx, args.Template)
+			})
+			if err != nil {
+				text := strings.TrimSpace(out)
+				if text != "" {
+					text += "\n" + err.Error()
+				} else {
+					text = err.Error()
+				}
+				return errResult(text), nil, nil
+			}
+			return textResult(strings.TrimSpace(out) + "\nPASS: " + args.Template), nil, nil
+		}
+
+		templates, err := scaffolder.ListTemplates(ctx)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
+
+		var sb strings.Builder
+		failures := 0
+		tested := 0
+		for _, tmpl := range templates {
+			if len(tmpl.Test) == 0 {
+				continue
+			}
+			tested++
+			out, err := captureStdout(func() error {
+				return scaffolder.Test(ctx, tmpl.Name)
+			})
+			if err != nil {
+				failures++
+				text := strings.TrimSpace(out)
+				if text != "" {
+					fmt.Fprintf(&sb, "%s\n", text)
+				}
+				fmt.Fprintf(&sb, "FAIL: %s — %v\n", tmpl.Name, err)
+			} else {
+				text := strings.TrimSpace(out)
+				if text != "" {
+					fmt.Fprintf(&sb, "%s\n", text)
+				}
+				fmt.Fprintf(&sb, "PASS: %s\n", tmpl.Name)
+			}
+		}
+
+		if tested == 0 {
+			return textResult("No templates with test blocks found."), nil, nil
+		}
+		if failures > 0 {
+			fmt.Fprintf(&sb, "\n%d of %d template(s) failed", failures, tested)
+			return errResult(sb.String()), nil, nil
+		}
+		fmt.Fprintf(&sb, "\nAll %d template(s) passed", tested)
+		return textResult(sb.String()), nil, nil
+	})
 }

@@ -7,6 +7,8 @@ type Template struct {
 	Description   string            `yaml:"description"`
 	Commands      []TemplateCommand `yaml:"commands"`
 	ShellCommands []ShellCommand    `yaml:"shell_commands"`
+	Test          []TestStep        `yaml:"test"`
+	Validate      []string          `yaml:"validate"`
 }
 
 type TemplateCommand struct {
@@ -56,4 +58,9 @@ type ShellCommand struct {
 	Mode    string `yaml:"mode"`    // "all" or "per-file"
 	Pattern string `yaml:"pattern"` // optional: comma-separated glob patterns
 	Silent  bool   `yaml:"silent"`  // when true, only show "Success" or the error
+}
+
+type TestStep struct {
+	Command string            `yaml:"command"`
+	Params  map[string]string `yaml:"params"`
 }

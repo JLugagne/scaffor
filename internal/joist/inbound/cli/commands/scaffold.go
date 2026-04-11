@@ -357,3 +357,75 @@ Checks include:
 	cmd.Flags().BoolVar(&lintAll, "all", false, "Lint all templates in the directory")
 	return cmd
 }
+
+func NewTestCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+	var testAll bool
+
+	cmd := &cobra.Command{
+		Use:   "test [template]",
+		Short: "Validate templates by executing them in a temp directory",
+		Long: `Execute a template's test block in a temporary directory and run validation commands.
+
+Each template can define a test block (list of commands with params) and a validate
+block (list of shell commands that must exit 0). This command runs them in a fresh
+temp directory to verify the template produces valid output.`,
+		Example: `  # Test a single template
+  joist test service
+
+  # Test all templates that have a test block
+  joist test --all`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("all") {
+				return cobra.MaximumNArgs(0)(cmd, args)
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			if testAll {
+				templates, err := scaffolder.ListTemplates(ctx)
+				if err != nil {
+					return fmt.Errorf("listing templates: %w", err)
+				}
+
+				failures := 0
+				tested := 0
+				for _, t := range templates {
+					if len(t.Test) == 0 {
+						continue
+					}
+					tested++
+					if err := scaffolder.Test(ctx, t.Name); err != nil {
+						fmt.Printf("FAIL: %s — %v\n", t.Name, err)
+						failures++
+					} else {
+						fmt.Printf("PASS: %s\n", t.Name)
+					}
+				}
+
+				if tested == 0 {
+					fmt.Println("No templates with test blocks found.")
+					return nil
+				}
+
+				if failures > 0 {
+					return fmt.Errorf("%d of %d template(s) failed", failures, tested)
+				}
+				fmt.Printf("\nAll %d template(s) passed\n", tested)
+				return nil
+			}
+
+			templateName := args[0]
+			if err := scaffolder.Test(ctx, templateName); err != nil {
+				fmt.Printf("FAIL: %s — %v\n", templateName, err)
+				return err
+			}
+			fmt.Printf("PASS: %s\n", templateName)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&testAll, "all", false, "Test all templates that have a test block")
+	return cmd
+}
