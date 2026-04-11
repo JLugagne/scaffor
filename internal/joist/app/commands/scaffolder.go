@@ -587,12 +587,21 @@ func inspectNode(node parse.Node, vars map[string]bool) {
 	}
 	switch n := node.(type) {
 	case *parse.ListNode:
+		if n == nil {
+			return
+		}
 		for _, child := range n.Nodes {
 			inspectNode(child, vars)
 		}
 	case *parse.ActionNode:
+		if n == nil {
+			return
+		}
 		inspectNode(n.Pipe, vars)
 	case *parse.PipeNode:
+		if n == nil {
+			return
+		}
 		for _, cmd := range n.Cmds {
 			for _, arg := range cmd.Args {
 				inspectNode(arg, vars)
@@ -603,17 +612,35 @@ func inspectNode(node parse.Node, vars map[string]bool) {
 			vars[n.Ident[0]] = true
 		}
 	case *parse.IfNode:
-		inspectNode(n.List, vars)
-		inspectNode(n.ElseList, vars)
-		inspectNode(n.Pipe, vars)
+		if n.List != nil {
+			inspectNode(n.List, vars)
+		}
+		if n.ElseList != nil {
+			inspectNode(n.ElseList, vars)
+		}
+		if n.Pipe != nil {
+			inspectNode(n.Pipe, vars)
+		}
 	case *parse.RangeNode:
-		inspectNode(n.List, vars)
-		inspectNode(n.ElseList, vars)
-		inspectNode(n.Pipe, vars)
+		if n.List != nil {
+			inspectNode(n.List, vars)
+		}
+		if n.ElseList != nil {
+			inspectNode(n.ElseList, vars)
+		}
+		if n.Pipe != nil {
+			inspectNode(n.Pipe, vars)
+		}
 	case *parse.WithNode:
-		inspectNode(n.List, vars)
-		inspectNode(n.ElseList, vars)
-		inspectNode(n.Pipe, vars)
+		if n.List != nil {
+			inspectNode(n.List, vars)
+		}
+		if n.ElseList != nil {
+			inspectNode(n.ElseList, vars)
+		}
+		if n.Pipe != nil {
+			inspectNode(n.Pipe, vars)
+		}
 	}
 }
 
