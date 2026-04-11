@@ -14,8 +14,7 @@ import (
 
 	"github.com/JLugagne/joist/internal/joist/domain"
 	"github.com/JLugagne/joist/internal/joist/domain/repositories/filesystem"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -73,11 +72,7 @@ func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string
 }
 
 func getFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"lower": strings.ToLower,
-		"upper": strings.ToUpper,
-		"title": cases.Title(language.English).String,
-	}
+	return sprig.TxtFuncMap()
 }
 
 // Execute performs the scaffolding with dedup and hint aggregation.

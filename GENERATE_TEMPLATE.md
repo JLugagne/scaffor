@@ -50,13 +50,23 @@ Take each source file that's part of the pattern and create a `.tmpl` copy. Repl
 
 ### Available Functions
 
-Three built-in pipe functions:
+Templates use the full [Sprig](https://masterminds.github.io/sprig/) function library, giving you 100+ pipe functions out of the box. Some commonly useful ones:
 
 | Function | Effect | Example |
 |----------|--------|---------|
 | `lower` | lowercase | `{{ .Entity \| lower }}` → `user` |
 | `upper` | UPPERCASE | `{{ .Entity \| upper }}` → `USER` |
 | `title` | Title Case | `{{ .Command \| title }}` → `Create` |
+| `camelcase` | camelCase | `{{ .Entity \| camelcase }}` → `orderItem` |
+| `snakecase` | snake_case | `{{ .Entity \| snakecase }}` → `order_item` |
+| `kebabcase` | kebab-case | `{{ .Entity \| kebabcase }}` → `order-item` |
+| `replace` | string replace | `{{ .Name \| replace "-" "_" }}` |
+| `trim` | strip whitespace | `{{ .Name \| trim }}` |
+| `default` | fallback value | `{{ .Port \| default "8080" }}` |
+| `plural` | pluralize | `{{ .Entity \| plural }}` → `orders` |
+| `contains` | substring test | `{{ if contains "admin" .Role }}...{{ end }}` |
+
+See the full list at https://masterminds.github.io/sprig/ — all string, math, date, regex, list, and dict functions are available.
 
 ### Conversion Example
 
