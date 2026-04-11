@@ -264,21 +264,15 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 	fmt.Printf("SUCCESS: Executed %s/%s (%d commands, %d skipped)\n", templateName, commandName, len(executedCommands), skippedCount)
 
-	// Collect shell_commands from the template root (resolved against params)
+	// Collect shell_commands from the template root.
+	// These are NOT rendered here — they are rendered in the second pass below
+	// with a combined context that includes both user params and File/Files.
 	for _, sc := range tmpl.ShellCommands {
-		cmdTmpl, err := template.New("shellcmd").Funcs(funcMap).Parse(sc.Command)
-		if err != nil {
-			return fileEvents, fmt.Errorf("failed to parse shell_command template %q: %w", sc.Command, err)
-		}
-		var cmdBuf bytes.Buffer
-		if err := cmdTmpl.Execute(&cmdBuf, params); err != nil {
-			return fileEvents, fmt.Errorf("failed to render shell_command template %q: %w", sc.Command, err)
-		}
 		mode := sc.Mode
 		if mode == "" {
 			mode = "all"
 		}
-		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String(), pattern: sc.Pattern, silent: sc.Silent})
+		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: sc.Command, pattern: sc.Pattern, silent: sc.Silent})
 	}
 
 	if len(cmdShellCmds) == 0 && len(shellCmds) == 0 {
@@ -316,28 +310,34 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 		matchingFilesStr := strings.Join(matchingFiles, " ")
 
+		// Build a combined data context: user params + File/Files.
+		baseData := make(map[string]string, len(params)+2)
+		for k, v := range params {
+			baseData[k] = v
+		}
+		baseData["Files"] = matchingFilesStr
+
 		switch sc.mode {
 		case "per-file":
 			for _, f := range matchingFiles {
-				data := map[string]string{"File": f, "Files": matchingFilesStr}
+				baseData["File"] = f
 				t, err := template.New("scfile").Funcs(funcMap).Parse(sc.command)
 				if err != nil {
 					return fileEvents, fmt.Errorf("failed to parse per-file shell_command %q: %w", sc.command, err)
 				}
 				var buf bytes.Buffer
-				if err := t.Execute(&buf, data); err != nil {
+				if err := t.Execute(&buf, baseData); err != nil {
 					return fileEvents, fmt.Errorf("failed to render per-file shell_command %q: %w", sc.command, err)
 				}
 				toRun = append(toRun, renderedCmd{rendered: buf.String(), silent: sc.silent})
 			}
 		default: // "all"
-			data := map[string]string{"Files": matchingFilesStr}
 			t, err := template.New("scall").Funcs(funcMap).Parse(sc.command)
 			if err != nil {
 				return fileEvents, fmt.Errorf("failed to parse shell_command %q: %w", sc.command, err)
 			}
 			var buf bytes.Buffer
-			if err := t.Execute(&buf, data); err != nil {
+			if err := t.Execute(&buf, baseData); err != nil {
 				return fileEvents, fmt.Errorf("failed to render shell_command %q: %w", sc.command, err)
 			}
 			toRun = append(toRun, renderedCmd{rendered: buf.String(), silent: sc.silent})
