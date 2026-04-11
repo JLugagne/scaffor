@@ -1,9 +1,10 @@
 package domain
 
 // ExecuteOptions controls file-conflict behaviour during scaffolding.
+// ExecuteOptions controls file-conflict behaviour during scaffolding.
 type ExecuteOptions struct {
-	// RunCommands executes shell_commands automatically instead of printing them.
-	RunCommands bool
+	// DryRun prints shell_commands instead of executing them.
+	DryRun bool
 	// Skip silently skips files that already exist instead of failing.
 	Skip bool
 	// Force overwrites files that already exist instead of failing.

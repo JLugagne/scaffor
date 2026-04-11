@@ -19,12 +19,12 @@ type docInput struct {
 }
 
 type executeInput struct {
-	Template    string            `json:"template" jsonschema:"name of the template directory under .joist-templates/ (e.g. \"service\")"`
-	Command     string            `json:"command" jsonschema:"command name to execute within the template (e.g. \"create\"); call doc first to discover available commands"`
-	Params      map[string]string `json:"params,omitempty" jsonschema:"variables as key→value pairs; keys are case-sensitive and must start with a capital letter (e.g. {\"Name\": \"catalog\", \"Port\": \"8080\"}); call doc(template, command) to discover required variables"`
-	RunCommands bool              `json:"run_commands,omitempty" jsonschema:"when true, shell_commands in the manifest are executed automatically via sh -c; when false (default) they are printed for manual execution"`
-	Skip        bool              `json:"skip,omitempty" jsonschema:"when true, silently skip files that already exist instead of failing"`
-	Force       bool              `json:"force,omitempty" jsonschema:"when true, overwrite files that already exist instead of failing"`
+	Template string            `json:"template" jsonschema:"name of the template directory under .joist-templates/ (e.g. \"service\")"`
+	Command  string            `json:"command" jsonschema:"command name to execute within the template (e.g. \"create\"); call doc first to discover available commands"`
+	Params   map[string]string `json:"params,omitempty" jsonschema:"variables as key→value pairs; keys are case-sensitive and must start with a capital letter (e.g. {\"Name\": \"catalog\", \"Port\": \"8080\"}); call doc(template, command) to discover required variables"`
+	DryRun   bool              `json:"dry_run,omitempty" jsonschema:"when true, shell_commands are printed but not executed; when false (default) they are executed automatically"`
+	Skip     bool              `json:"skip,omitempty" jsonschema:"when true, silently skip files that already exist instead of failing"`
+	Force    bool              `json:"force,omitempty" jsonschema:"when true, overwrite files that already exist instead of failing"`
 }
 
 type lintInput struct {
@@ -249,22 +249,20 @@ Pre-flight check: by default the tool refuses to run if any target file already 
 preventing accidental overwrites. Use skip=true to silently skip existing files or
 force=true to overwrite them.
 
-After files are written, any shell_commands defined in the manifest are handled based on
-run_commands:
-  false (default) — commands are printed in the output for you or the user to run manually
-  true            — commands are executed automatically via sh -c in the working directory
+After files are written, shell_commands defined in the manifest are executed automatically.
+Set dry_run=true to print them without executing.
 
-The output reports all file events (created, overwritten, skipped), optional per-command
-hints, and shell commands.`,
+The output reports all file events (created, overwritten, skipped), shell command results,
+optional per-command hints, and shell commands.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args executeInput) (*sdkmcp.CallToolResult, any, error) {
 		params := args.Params
 		if params == nil {
 			params = map[string]string{}
 		}
 		opts := domain.ExecuteOptions{
-			RunCommands: args.RunCommands,
-			Skip:        args.Skip,
-			Force:       args.Force,
+			DryRun: args.DryRun,
+			Skip:   args.Skip,
+			Force:  args.Force,
 		}
 		var fileEvents []domain.FileEvent
 		// Execute writes its output to os.Stdout. Capture it so that it can be

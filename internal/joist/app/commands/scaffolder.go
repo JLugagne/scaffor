@@ -77,7 +77,7 @@ func getFuncMap() template.FuncMap {
 
 // Execute performs the scaffolding with dedup and hint aggregation.
 // After files are written, post_commands are resolved and either printed
-// (for the LLM/user to run manually) or executed directly when opts.RunCommands is true.
+// (for the LLM/user to run manually) or executed directly (default, unless opts.DryRun is true).
 // It returns a slice of FileEvent recording what happened to each target file.
 func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string, opts domain.ExecuteOptions) ([]domain.FileEvent, error) {
 	tmpl, err := h.GetTemplate(ctx, templateName)
@@ -338,23 +338,29 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		}
 	}
 
-	if opts.RunCommands {
-		fmt.Printf("\nRunning shell commands:\n")
-		for _, rc := range toRun {
-			fmt.Printf("  $ %s\n", rc.rendered)
-			cmd := exec.CommandContext(ctx, "sh", "-c", rc.rendered)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fileEvents, fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
-			}
-		}
-	} else {
-		fmt.Printf("\nShell commands to run:\n")
+	if opts.DryRun {
+		fmt.Printf("\nShell commands (dry-run):\n")
 		for _, rc := range toRun {
 			fmt.Printf("  %s\n", rc.rendered)
 		}
-		fmt.Printf("\nRun with --run-commands to execute them automatically.\n")
+	} else {
+		fmt.Println()
+		for _, rc := range toRun {
+			fmt.Printf("Execute command: %s\n", rc.rendered)
+			cmd := exec.CommandContext(ctx, "sh", "-c", rc.rendered)
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			cmd.Stderr = &out
+			err := cmd.Run()
+			result := strings.TrimSpace(out.String())
+			if result != "" {
+				fmt.Printf("Result: %s\n", result)
+			}
+			if err != nil {
+				return fileEvents, fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
+			}
+			fmt.Println()
+		}
 	}
 
 	return fileEvents, nil

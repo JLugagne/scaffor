@@ -435,7 +435,7 @@ commands:
 		assert.Contains(t, err.Error(), "..")
 	})
 
-	t.Run("runCommands=false prints shell commands", func(t *testing.T) {
+	t.Run("dry-run prints shell commands without executing", func(t *testing.T) {
 		fs := &mockFS{files: map[string][]byte{
 			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
 commands:
@@ -446,7 +446,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
 
@@ -463,7 +463,7 @@ shell_commands:
     mode: per-file
 `)
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
 
@@ -479,7 +479,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
 }
@@ -695,8 +695,8 @@ commands:
 	})
 }
 
-// TestScaffolder_Execute_RunCommands exercises the runCommands=true path.
-func TestScaffolder_Execute_RunCommands(t *testing.T) {
+// TestScaffolder_Execute_ShellCommands exercises shell command execution (default behaviour).
+func TestScaffolder_Execute_ShellCommands(t *testing.T) {
 	ctx := context.Background()
 	fs := &mockFS{files: map[string][]byte{
 		".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
@@ -708,7 +708,7 @@ shell_commands:
 `),
 	}}
 	handler := commands.NewScaffolderHandler(fs)
-	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{RunCommands: true})
+	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 	require.NoError(t, err)
 }
 
@@ -898,10 +898,8 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
-		// When pattern is applied, only .go files should be in {{ .Files }}
-		// This is verified by the test not panicking and shell command being printed
 	})
 
 	t.Run("multiple patterns separated by comma", func(t *testing.T) {
@@ -919,7 +917,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
 
@@ -939,9 +937,8 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
-		// Should only run on .go files in per-file mode
 	})
 
 	t.Run("no matching files skips shell command", func(t *testing.T) {
@@ -958,9 +955,8 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
-		// Should succeed even though no files match the pattern
 	})
 
 	t.Run("no pattern matches all files (default behavior)", func(t *testing.T) {
@@ -976,9 +972,8 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
-		// Both files should be in {{ .Files }} when no pattern is specified
 	})
 }
 
