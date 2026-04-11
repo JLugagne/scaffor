@@ -406,6 +406,11 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 				return err
 			}
 
+			// Files with on_conflict skip or force don't need a pre-flight check.
+			if fileTmpl.OnConflict == "skip" || fileTmpl.OnConflict == "force" {
+				continue
+			}
+
 			_, err = h.fs.ReadFile(ctx, targetPath)
 			if err == nil {
 				return fmt.Errorf("pre-flight check failed: file %s already exists", targetPath)
