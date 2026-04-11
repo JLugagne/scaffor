@@ -160,9 +160,14 @@ shell_commands:                  # Optional, template-level, runs after all file
 - `destination`: output file path. Supports full template syntax including pipe functions.
   - Example: `internal/{{ .AppName }}/domain/{{ .Entity | lower }}.go`
 - `on_conflict`: controls what happens when the destination file already exists. Values:
-  - `default` (or omitted) — follows the global `--skip`/`--force` flags; blocks if neither is set
-  - `skip` — always skip this file silently, regardless of flags
-  - `force` — always overwrite this file, regardless of flags
+  - `default` (or omitted) — follows the global `--skip`/`--force` flags; **blocks** if neither is set
+  - `skip` — always skip this file silently, regardless of flags (pre-flight check is also skipped)
+  - `force` — always overwrite this file, regardless of flags (pre-flight check is also skipped)
+
+  **Choosing the right value per file kind:**
+  - Use `skip` for files the user is expected to edit after generation (domain entities, app services, adapters) — re-running the template should never clobber their work.
+  - Use `force` for files that are fully generated from a source of truth (mocks, contract test stubs, generated config).
+  - Use `default` (or omit) when neither rule applies and the user should decide at execution time.
 
 **`variables`** — Declared per-command. Each variable used in destinations, sources, or hints must be declared here.
 

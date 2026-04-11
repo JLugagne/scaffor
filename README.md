@@ -106,7 +106,10 @@ Catches undeclared variables, broken references, invalid modes, and suggests cor
 > **Templates can execute arbitrary shell commands.** Both per-command `shell_commands` and template-level `shell_commands` are run automatically by default after files are written. Review any template you did not author before running `joist execute`. Use `--dry-run` to print commands without executing them.
 
 - **Shell commands run by default.** Pass `--dry-run` to preview them without execution.
-- **Pre-flight checks** abort if any destination file already exists (use `--skip` or `--force` to override, or set `on_conflict` per file in the manifest).
+- **Pre-flight checks** abort if any destination file already exists. Override globally with `--skip` (skip existing) or `--force` (overwrite), or per file with `on_conflict` in the manifest:
+  - `default` (or omitted) — follows the global `--skip`/`--force` flags; **blocks** if neither is set
+  - `skip` — always skip this file silently, regardless of flags
+  - `force` — always overwrite this file, regardless of flags
 - **Directory traversal** (`..`) in destination paths is rejected.
 - **Treat templates like code.** A malicious template can run anything your shell can. Only use templates from sources you trust.
 
