@@ -320,6 +320,7 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("no .joist-templates dir returns empty slice", func(t *testing.T) {
+		_ = os.RemoveAll(".joist-templates")
 		fs := &mockFS{files: make(map[string][]byte)}
 		handler := commands.NewScaffolderHandler(fs)
 		templates, err := handler.ListTemplates(ctx)
@@ -332,7 +333,6 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 		setupTestTemplates(t, fs)
 		handler := commands.NewScaffolderHandler(fs)
 
-		// ListTemplates uses os.ReadDir, so we need actual dirs on disk
 		require.NoError(t, os.MkdirAll(".joist-templates/hexagonal", 0755))
 		t.Cleanup(func() { _ = os.RemoveAll(".joist-templates") })
 
@@ -342,9 +342,9 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 		assert.Equal(t, "hexagonal", templates[0].Name)
 	})
 
-	t.Run("template with invalid manifest is silently skipped", func(t *testing.T) {
+	t.Run("template with invalid manifest is still listed", func(t *testing.T) {
 		fs := &mockFS{files: make(map[string][]byte)}
-		// manifest missing entirely — GetTemplate will error, ListTemplates skips
+		// manifest missing entirely — GetTemplate will error, ListTemplates includes stub
 		handler := commands.NewScaffolderHandler(fs)
 
 		require.NoError(t, os.MkdirAll(".joist-templates/broken", 0755))
@@ -352,7 +352,9 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 
 		templates, err := handler.ListTemplates(ctx)
 		require.NoError(t, err)
-		assert.Empty(t, templates)
+		require.Len(t, templates, 1)
+		assert.Equal(t, "broken", templates[0].Name)
+		assert.Empty(t, templates[0].Commands)
 	})
 
 	t.Run("os.ReadDir error (non-NotExist) is returned", func(t *testing.T) {

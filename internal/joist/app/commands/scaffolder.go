@@ -28,7 +28,9 @@ func NewScaffolderHandler(fs filesystem.FileSystem) *ScaffolderHandler {
 	return &ScaffolderHandler{fs: fs}
 }
 
-// ListTemplates scans .joist-templates/ and returns all valid templates.
+// ListTemplates scans .joist-templates/ and returns all template directories.
+// Templates whose manifests fail to parse are still included (with name only)
+// so that lint --all can report the errors.
 func (h *ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Template, error) {
 	var templates []domain.Template
 	files, err := os.ReadDir(".joist-templates")
@@ -45,6 +47,8 @@ func (h *ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Templat
 		}
 		tmpl, err := h.GetTemplate(ctx, entry.Name())
 		if err != nil {
+			// Include the template with just its name so lint --all can report the error.
+			templates = append(templates, domain.Template{Name: entry.Name()})
 			continue
 		}
 		templates = append(templates, tmpl)

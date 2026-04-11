@@ -119,6 +119,10 @@ Only create files manually if no template covers the use case.`,
 		sb.WriteString("Available Templates:\n")
 		for _, tmpl := range templates {
 			fmt.Fprintf(&sb, "\n- %s:\n", tmpl.Name)
+			if len(tmpl.Commands) == 0 && tmpl.Description == "" {
+				sb.WriteString("    (manifest has errors — call lint to see details)\n")
+				continue
+			}
 			desc := strings.TrimSpace(tmpl.Description)
 			if desc != "" {
 				for _, line := range strings.Split(desc, "\n") {

@@ -35,6 +35,10 @@ one fits your use case, then explore it further with "joist doc <template>".`,
 			fmt.Println("Available Templates:")
 			for _, tmpl := range templates {
 				fmt.Printf("\n- %s:\n", tmpl.Name)
+				if len(tmpl.Commands) == 0 && tmpl.Description == "" {
+					fmt.Println("    (manifest has errors — run joist lint to see details)")
+					continue
+				}
 				desc := strings.TrimSpace(tmpl.Description)
 				if desc != "" {
 					for _, line := range strings.Split(desc, "\n") {
