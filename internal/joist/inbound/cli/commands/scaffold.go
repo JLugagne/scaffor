@@ -64,6 +64,12 @@ func printCommandDetail(cmd domain.TemplateCommand) {
 			fmt.Printf("    → %s\n", pc)
 		}
 	}
+	if len(cmd.ShellCommands) > 0 {
+		fmt.Println("\n  Shell commands:")
+		for _, sc := range cmd.ShellCommands {
+			fmt.Printf("    $ %s\n", sc)
+		}
+	}
 }
 
 func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command {

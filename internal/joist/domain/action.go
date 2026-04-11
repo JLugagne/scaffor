@@ -10,12 +10,13 @@ type Template struct {
 }
 
 type TemplateCommand struct {
-	Command      string             `yaml:"command"`
-	Description  string             `yaml:"description"`
-	Variables    []TemplateVariable `yaml:"variables"`
-	Files        []TemplateFile     `yaml:"files"`
-	PostCommands []string           `yaml:"post_commands"`
-	Hint         string             `yaml:"hint"`
+	Command       string             `yaml:"command"`
+	Description   string             `yaml:"description"`
+	Variables     []TemplateVariable `yaml:"variables"`
+	Files         []TemplateFile     `yaml:"files"`
+	PostCommands  []string           `yaml:"post_commands"`
+	ShellCommands []string           `yaml:"shell_commands"`
+	Hint          string             `yaml:"hint"`
 }
 
 type TemplateVariable struct {
@@ -50,6 +51,6 @@ func (e LintError) Error() string {
 // When specified, only files matching the pattern(s) are included (default: all files).
 type ShellCommand struct {
 	Command string `yaml:"command"`
-	Mode    string `yaml:"mode"`       // "all" or "per-file"
-	Pattern string `yaml:"pattern"`    // optional: comma-separated glob patterns
+	Mode    string `yaml:"mode"`    // "all" or "per-file"
+	Pattern string `yaml:"pattern"` // optional: comma-separated glob patterns
 }

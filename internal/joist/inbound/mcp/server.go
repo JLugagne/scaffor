@@ -147,6 +147,12 @@ func writeCommandDetail(sb *strings.Builder, cmd domain.TemplateCommand) {
 			fmt.Fprintf(sb, "    → %s\n", pc)
 		}
 	}
+	if len(cmd.ShellCommands) > 0 {
+		sb.WriteString("\n  Shell commands:\n")
+		for _, sc := range cmd.ShellCommands {
+			fmt.Fprintf(sb, "    $ %s\n", sc)
+		}
+	}
 }
 
 func registerDocTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {

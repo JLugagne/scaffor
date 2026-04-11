@@ -118,6 +118,9 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 	var shellCmds []resolvedCmd
 
+	// cmdShellCmds accumulates per-command shell commands (rendered with params).
+	var cmdShellCmds []string
+
 	var executeNode func(cmdName string) error
 	executeNode = func(cmdName string) error {
 		if visited[cmdName] {
@@ -204,6 +207,19 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			}
 		}
 
+		// Resolve per-command shell_commands with the same params as files/hints.
+		for _, sc := range cmd.ShellCommands {
+			t, err := template.New("cmdshell").Funcs(funcMap).Parse(sc)
+			if err != nil {
+				return fmt.Errorf("failed to parse command shell_command %q: %w", sc, err)
+			}
+			var buf bytes.Buffer
+			if err := t.Execute(&buf, params); err != nil {
+				return fmt.Errorf("failed to render command shell_command %q: %w", sc, err)
+			}
+			cmdShellCmds = append(cmdShellCmds, buf.String())
+		}
+
 		executedCommands = append(executedCommands, cmdName)
 
 		// Chain post_commands (other commands in this template, deduplicated)
@@ -249,18 +265,23 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String(), pattern: sc.Pattern})
 	}
 
-	if len(shellCmds) == 0 {
+	if len(cmdShellCmds) == 0 && len(shellCmds) == 0 {
 		return fileEvents, nil
 	}
-
-	// Resolve per-file and all-files variants of each shell_command.
-	// {{ .Files }} → space-joined list of files matching the pattern
-	// {{ .File }} → individual file (per-file mode only)
 
 	type renderedCmd struct {
 		rendered string
 	}
 	var toRun []renderedCmd
+
+	// Per-command shell_commands (already rendered with params).
+	for _, sc := range cmdShellCmds {
+		toRun = append(toRun, renderedCmd{rendered: sc})
+	}
+
+	// Resolve per-file and all-files variants of template-level shell_commands.
+	// {{ .Files }} → space-joined list of files matching the pattern
+	// {{ .File }} → individual file (per-file mode only)
 
 	for _, sc := range shellCmds {
 		// Filter files based on pattern (if specified)
@@ -500,6 +521,32 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			for v := range used {
 				if !declared[v] {
 					errs = append(errs, undeclaredErr(v, "files.source:"+f.Source))
+				}
+			}
+		}
+
+		// Validate per-command shell_commands
+		for i, sc := range cmd.ShellCommands {
+			if sc == "" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "shell_commands",
+					Message: fmt.Sprintf("shell_command[%d] is empty", i),
+				})
+				continue
+			}
+			if _, err := template.New("").Funcs(getFuncMap()).Parse(sc); err != nil {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "shell_commands",
+					Message: fmt.Sprintf("shell_command[%d] has invalid template syntax: %v", i, err),
+				})
+				continue
+			}
+			scUsed := extractTemplateVars(sc)
+			for v := range scUsed {
+				if !declared[v] {
+					errs = append(errs, undeclaredErr(v, "shell_commands"))
 				}
 			}
 		}
