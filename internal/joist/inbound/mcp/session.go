@@ -67,7 +67,7 @@ func (s *Session) Log(tool string, params map[string]any, events []FileEvent) er
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = f.Write(data)
 	return err
 }
