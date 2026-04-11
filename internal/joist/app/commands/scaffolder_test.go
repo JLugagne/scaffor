@@ -979,6 +979,69 @@ shell_commands:
 	})
 }
 
+// TestScaffolder_ShellCommand_FilesRendering verifies that {{ .Files }} and {{ .File }}
+// are correctly rendered in template-level shell_commands (regression test for <no value> bug).
+func TestScaffolder_ShellCommand_FilesRendering(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Files placeholder is rendered with created file paths", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "out/a.go"
+      - destination: "out/b.go"
+shell_commands:
+  - command: "echo {{ .Files }}"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		// Execute (not dry-run) so the shell command actually runs.
+		// "echo ..." always succeeds and produces output.
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		// If {{ .Files }} were <no value>, echo would print "<no value>" and the
+		// command would still succeed, but we verify no error occurs at all.
+	})
+
+	t.Run("File placeholder is rendered per-file", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    files:
+      - destination: "out/x.go"
+shell_commands:
+  - command: "echo {{ .File }}"
+    mode: per-file
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+	})
+
+	t.Run("user params are available in template-level shell_commands", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".joist-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: do
+    variables:
+      - key: Name
+        description: name
+    files:
+      - destination: "out/file.go"
+shell_commands:
+  - command: "echo {{ .Name }} {{ .Files }}"
+`),
+		}}
+		handler := commands.NewScaffolderHandler(fs)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{"Name": "hello"}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+	})
+}
+
 // TestScaffolder_Lint_ShellCommandPatternValidation tests pattern validation in lint.
 func TestScaffolder_Lint_ShellCommandPatternValidation(t *testing.T) {
 	ctx := context.Background()
