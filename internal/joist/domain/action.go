@@ -50,8 +50,10 @@ func (e LintError) Error() string {
 // Mode "per-file" runs the command once per created file ({{ .File }}).
 // Pattern is an optional comma-separated list of glob patterns (e.g. "*.go" or "*.js,*.tsx").
 // When specified, only files matching the pattern(s) are included (default: all files).
+// ShellCommand is a shell command to run after scaffolding files are written.
 type ShellCommand struct {
 	Command string `yaml:"command"`
 	Mode    string `yaml:"mode"`    // "all" or "per-file"
 	Pattern string `yaml:"pattern"` // optional: comma-separated glob patterns
+	Silent  bool   `yaml:"silent"`  // when true, only show "Success" or the error
 }

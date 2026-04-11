@@ -119,11 +119,12 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		mode    string // "all" or "per-file"
 		command string
 		pattern string
+		silent  bool
 	}
 	var shellCmds []resolvedCmd
 
 	// cmdShellCmds accumulates per-command shell commands (rendered with params).
-	var cmdShellCmds []string
+	var cmdShellCmds []resolvedCmd
 
 	var executeNode func(cmdName string) error
 	executeNode = func(cmdName string) error {
@@ -232,7 +233,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			if err := t.Execute(&buf, params); err != nil {
 				return fmt.Errorf("failed to render command shell_command %q: %w", sc.Command, err)
 			}
-			cmdShellCmds = append(cmdShellCmds, buf.String())
+			cmdShellCmds = append(cmdShellCmds, resolvedCmd{command: buf.String(), silent: sc.Silent})
 		}
 
 		executedCommands = append(executedCommands, cmdName)
@@ -277,7 +278,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		if mode == "" {
 			mode = "all"
 		}
-		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String(), pattern: sc.Pattern})
+		shellCmds = append(shellCmds, resolvedCmd{mode: mode, command: cmdBuf.String(), pattern: sc.Pattern, silent: sc.Silent})
 	}
 
 	if len(cmdShellCmds) == 0 && len(shellCmds) == 0 {
@@ -286,12 +287,13 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 
 	type renderedCmd struct {
 		rendered string
+		silent   bool
 	}
 	var toRun []renderedCmd
 
 	// Per-command shell_commands (already rendered with params).
 	for _, sc := range cmdShellCmds {
-		toRun = append(toRun, renderedCmd{rendered: sc})
+		toRun = append(toRun, renderedCmd{rendered: sc.command, silent: sc.silent})
 	}
 
 	// Resolve per-file and all-files variants of template-level shell_commands.
@@ -326,7 +328,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 				if err := t.Execute(&buf, data); err != nil {
 					return fileEvents, fmt.Errorf("failed to render per-file shell_command %q: %w", sc.command, err)
 				}
-				toRun = append(toRun, renderedCmd{rendered: buf.String()})
+				toRun = append(toRun, renderedCmd{rendered: buf.String(), silent: sc.silent})
 			}
 		default: // "all"
 			data := map[string]string{"Files": matchingFilesStr}
@@ -338,7 +340,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			if err := t.Execute(&buf, data); err != nil {
 				return fileEvents, fmt.Errorf("failed to render shell_command %q: %w", sc.command, err)
 			}
-			toRun = append(toRun, renderedCmd{rendered: buf.String()})
+			toRun = append(toRun, renderedCmd{rendered: buf.String(), silent: sc.silent})
 		}
 	}
 
@@ -356,12 +358,20 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			cmd.Stdout = &out
 			cmd.Stderr = &out
 			err := cmd.Run()
-			result := strings.TrimSpace(out.String())
-			if result != "" {
-				fmt.Printf("Result: %s\n", result)
-			}
-			if err != nil {
-				return fileEvents, fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
+			if rc.silent {
+				if err != nil {
+					fmt.Printf("Result: Error\n")
+					return fileEvents, fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
+				}
+				fmt.Printf("Result: Success\n")
+			} else {
+				result := strings.TrimSpace(out.String())
+				if result != "" {
+					fmt.Printf("Result: %s\n", result)
+				}
+				if err != nil {
+					return fileEvents, fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
+				}
 			}
 			fmt.Println()
 		}
