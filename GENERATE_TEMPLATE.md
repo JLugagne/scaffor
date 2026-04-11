@@ -68,6 +68,12 @@ Templates use the full [Sprig](https://masterminds.github.io/sprig/) function li
 
 See the full list at https://masterminds.github.io/sprig/ — all string, math, date, regex, list, and dict functions are available.
 
+> **`splitList` vs `split` gotcha:** To iterate over a comma-separated variable, use `splitList` (returns `[]string`, order-preserving), **not** `split` (returns `map[string]string`, non-deterministic order). Also note that sprig functions take the **separator first**: `splitList "," .Events`, not `splitList .Events ","`. The pipe form `.Events | splitList ","` also works.
+>
+> ```
+> {{ range (splitList "," .Events) }}{{ . | trim }}{{ end }}
+> ```
+
 ### Conversion Example
 
 **Before** — concrete source file `internal/myapp/domain/order.go`:
