@@ -254,7 +254,6 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 
 	// Output summary
-	skippedCount := len(visited) - len(executedCommands)
 	fmt.Printf("File events:\n")
 	for _, ev := range fileEvents {
 		fmt.Printf("  [%s] %s\n", ev.Action, ev.Path)
@@ -263,8 +262,6 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	for _, hint := range hints {
 		fmt.Println(hint)
 	}
-	fmt.Printf("SUCCESS: Executed %s/%s (%d commands, %d skipped)\n", templateName, commandName, len(executedCommands), skippedCount)
-
 	// Collect shell_commands from the template root.
 	// These are NOT rendered here — they are rendered in the second pass below
 	// with a combined context that includes both user params and File/Files.
@@ -377,6 +374,9 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			fmt.Println()
 		}
 	}
+
+	skippedCount := len(visited) - len(executedCommands)
+	fmt.Printf("SUCCESS: Executed %s/%s (%d commands, %d skipped)\n", templateName, commandName, len(executedCommands), skippedCount)
 
 	return fileEvents, nil
 }
