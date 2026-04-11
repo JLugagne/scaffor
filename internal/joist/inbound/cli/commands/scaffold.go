@@ -47,8 +47,29 @@ one fits your use case, then explore it further with "joist doc <template>".`,
 	}
 }
 
+func printCommandDetail(cmd domain.TemplateCommand) {
+	fmt.Printf("Command: %s\n", cmd.Command)
+	fmt.Printf("  %s\n\n", cmd.Description)
+	if len(cmd.Variables) > 0 {
+		fmt.Println("  Variables:")
+		for _, v := range cmd.Variables {
+			fmt.Printf("    --set %s\t%s\n", v.Key, v.Description)
+		}
+	} else {
+		fmt.Println("  Variables: None")
+	}
+	if len(cmd.PostCommands) > 0 {
+		fmt.Println("\n  Post-commands (chains to other template commands):")
+		for _, pc := range cmd.PostCommands {
+			fmt.Printf("    → %s\n", pc)
+		}
+	}
+}
+
 func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
-	return &cobra.Command{
+	var showAll bool
+
+	cmd := &cobra.Command{
 		Use:   "doc <template> [command]",
 		Short: "Show documentation for a template or specific command",
 		Long: `Show documentation for a template or one of its commands.
@@ -56,11 +77,17 @@ func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 When called with only a template name, lists all commands the template exposes
 along with their descriptions.
 
+When called with --all/-a, shows full details (variables, post_commands) for
+every command in the template at once.
+
 When called with a template name and a command name, shows the full details for
 that command: its description, the variables you must supply via --set, and
 the post_commands that will run after scaffolding.`,
 		Example: `  # List all commands in the "service" template
   joist doc service
+
+  # Show full details for every command at once
+  joist doc service --all
 
   # Show variables required by the "create" command in the "service" template
   joist doc service create`,
@@ -72,7 +99,7 @@ the post_commands that will run after scaffolding.`,
 				return err
 			}
 
-			if len(args) == 1 {
+			if len(args) == 1 && !showAll {
 				fmt.Printf("Template: %s\n", tmpl.Name)
 				fmt.Printf("%s\n\n", tmpl.Description)
 				fmt.Println("Commands:")
@@ -89,7 +116,29 @@ the post_commands that will run after scaffolding.`,
 						fmt.Printf("  [%s] %s\n", mode, sc.Command)
 					}
 				}
-				fmt.Printf("\nRun 'joist doc %s <command>' for details.\n", tmpl.Name)
+				fmt.Printf("\nRun 'joist doc %s <command>' or 'joist doc %s --all' for details.\n", tmpl.Name, tmpl.Name)
+				return nil
+			}
+
+			if showAll {
+				fmt.Printf("Template: %s\n", tmpl.Name)
+				fmt.Printf("%s\n\n", tmpl.Description)
+				for i, c := range tmpl.Commands {
+					if i > 0 {
+						fmt.Println()
+					}
+					printCommandDetail(c)
+				}
+				if len(tmpl.ShellCommands) > 0 {
+					fmt.Println("\nShell commands (run after any execute):")
+					for _, sc := range tmpl.ShellCommands {
+						mode := sc.Mode
+						if mode == "" {
+							mode = "all"
+						}
+						fmt.Printf("  [%s] %s\n", mode, sc.Command)
+					}
+				}
 				return nil
 			}
 
@@ -104,28 +153,13 @@ the post_commands that will run after scaffolding.`,
 				return fmt.Errorf("command '%s' not found in template '%s'", commandName, tmpl.Name)
 			}
 
-			fmt.Printf("Command: %s\n", targetCmd.Command)
-			fmt.Printf("  %s\n\n", targetCmd.Description)
-
-			if len(targetCmd.Variables) > 0 {
-				fmt.Println("  Variables:")
-				for _, v := range targetCmd.Variables {
-					fmt.Printf("    --set %s\t%s\n", v.Key, v.Description)
-				}
-			} else {
-				fmt.Println("  Variables: None")
-			}
-
-			if len(targetCmd.PostCommands) > 0 {
-				fmt.Println("\n  Post-commands (chains to other template commands):")
-				for _, pc := range targetCmd.PostCommands {
-					fmt.Printf("    → %s\n", pc)
-				}
-			}
-
+			printCommandDetail(targetCmd)
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVarP(&showAll, "all", "a", false, "Show full details for every command in the template.")
+	return cmd
 }
 
 func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {

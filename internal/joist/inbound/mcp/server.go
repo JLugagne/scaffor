@@ -15,6 +15,7 @@ import (
 type docInput struct {
 	Template string `json:"template" jsonschema:"name of the template directory under .joist-templates/ (e.g. \"service\")"`
 	Command  string `json:"command,omitempty" jsonschema:"command name within the template; omit to list all commands, provide to get the variables and post_commands for that specific command"`
+	All      bool   `json:"all,omitempty" jsonschema:"when true and command is omitted, show full details (variables, post_commands) for every command in the template at once"`
 }
 
 type executeInput struct {
@@ -54,7 +55,8 @@ Use the template if one matches — only write files manually when none does.
 Workflow:
   list                          → discover available templates
   doc(template)                 → list its commands and descriptions
-  doc(template, command)        → get the exact variables required
+  doc(template, all=true)       → get variables for ALL commands at once (preferred)
+  doc(template, command)        → get the exact variables for one command
   execute(template, command, …) → scaffold the files
   lint(template)                → validate a manifest after editing it
   status                        → review the session log of all tool calls and file events
@@ -128,32 +130,52 @@ Only create files manually if no template covers the use case.`,
 	})
 }
 
+func writeCommandDetail(sb *strings.Builder, cmd domain.TemplateCommand) {
+	fmt.Fprintf(sb, "Command: %s\n", cmd.Command)
+	fmt.Fprintf(sb, "  %s\n\n", cmd.Description)
+	if len(cmd.Variables) > 0 {
+		sb.WriteString("  Variables:\n")
+		for _, v := range cmd.Variables {
+			fmt.Fprintf(sb, "    %s\t%s\n", v.Key, v.Description)
+		}
+	} else {
+		sb.WriteString("  Variables: None\n")
+	}
+	if len(cmd.PostCommands) > 0 {
+		sb.WriteString("\n  Post-commands:\n")
+		for _, pc := range cmd.PostCommands {
+			fmt.Fprintf(sb, "    → %s\n", pc)
+		}
+	}
+}
+
 func registerDocTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "doc",
 		Description: `Show documentation for a joist template or one of its commands.
 
-Two modes depending on which arguments you provide:
+Three modes depending on which arguments you provide:
 
   template only — lists every command the template exposes (name + description) and any
-    shell_commands that run automatically after execution. Use this to understand what a
-    template can do before deciding which command to run.
+    shell_commands that run automatically after execution.
 
-  template + command — shows the full detail for that command: its description, every
-    variable you must supply via params when calling execute (name + description),
-    and the post_commands that will chain after it (other commands in the same template
-    that execute automatically).
+  template + all=true — shows full details (variables, post_commands) for every command
+    in the template at once, so you don't need to call doc per command.
 
-Call this before execute whenever you need to know which params are required.`,
+  template + command — shows the full detail for a single command: its description, every
+    variable you must supply via params when calling execute, and the post_commands.
+
+Call this before execute whenever you need to know which params are required.
+Prefer all=true when you need an overview of the entire template.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args docInput) (*sdkmcp.CallToolResult, any, error) {
-		logCall(session, "doc", map[string]any{"template": args.Template, "command": args.Command}, nil)
+		logCall(session, "doc", map[string]any{"template": args.Template, "command": args.Command, "all": args.All}, nil)
 		tmpl, err := scaffolder.GetTemplate(ctx, args.Template)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
 
 		var sb strings.Builder
-		if args.Command == "" {
+		if args.Command == "" && !args.All {
 			fmt.Fprintf(&sb, "Template: %s\n", tmpl.Name)
 			fmt.Fprintf(&sb, "%s\n\n", tmpl.Description)
 			sb.WriteString("Commands:\n")
@@ -170,7 +192,26 @@ Call this before execute whenever you need to know which params are required.`,
 					fmt.Fprintf(&sb, "  [%s] %s\n", mode, sc.Command)
 				}
 			}
-			fmt.Fprintf(&sb, "\nRun doc with a command name for details.")
+			fmt.Fprintf(&sb, "\nRun doc with a command name or all=true for details.")
+		} else if args.All {
+			fmt.Fprintf(&sb, "Template: %s\n", tmpl.Name)
+			fmt.Fprintf(&sb, "%s\n\n", tmpl.Description)
+			for i, c := range tmpl.Commands {
+				if i > 0 {
+					sb.WriteString("\n")
+				}
+				writeCommandDetail(&sb, c)
+			}
+			if len(tmpl.ShellCommands) > 0 {
+				sb.WriteString("\nShell commands (run after any execute):\n")
+				for _, sc := range tmpl.ShellCommands {
+					mode := sc.Mode
+					if mode == "" {
+						mode = "all"
+					}
+					fmt.Fprintf(&sb, "  [%s] %s\n", mode, sc.Command)
+				}
+			}
 		} else {
 			cmdMap := make(map[string]domain.TemplateCommand)
 			for _, c := range tmpl.Commands {
@@ -180,22 +221,7 @@ Call this before execute whenever you need to know which params are required.`,
 			if !ok {
 				return errResult(fmt.Sprintf("command %q not found in template %q", args.Command, args.Template)), nil, nil
 			}
-			fmt.Fprintf(&sb, "Command: %s\n", targetCmd.Command)
-			fmt.Fprintf(&sb, "  %s\n\n", targetCmd.Description)
-			if len(targetCmd.Variables) > 0 {
-				sb.WriteString("  Variables:\n")
-				for _, v := range targetCmd.Variables {
-					fmt.Fprintf(&sb, "    %s\t%s\n", v.Key, v.Description)
-				}
-			} else {
-				sb.WriteString("  Variables: None\n")
-			}
-			if len(targetCmd.PostCommands) > 0 {
-				sb.WriteString("\n  Post-commands:\n")
-				for _, pc := range targetCmd.PostCommands {
-					fmt.Fprintf(&sb, "    → %s\n", pc)
-				}
-			}
+			writeCommandDetail(&sb, targetCmd)
 		}
 		return textResult(sb.String()), nil, nil
 	})
