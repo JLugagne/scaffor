@@ -22,6 +22,8 @@ type executeInput struct {
 	Command     string            `json:"command" jsonschema:"command name to execute within the template (e.g. \"create\"); call doc first to discover available commands"`
 	Params      map[string]string `json:"params,omitempty" jsonschema:"variables as key→value pairs; keys are case-sensitive and must start with a capital letter (e.g. {\"Name\": \"catalog\", \"Port\": \"8080\"}); call doc(template, command) to discover required variables"`
 	RunCommands bool              `json:"run_commands,omitempty" jsonschema:"when true, shell_commands in the manifest are executed automatically via sh -c; when false (default) they are printed for manual execution"`
+	Skip        bool              `json:"skip,omitempty" jsonschema:"when true, silently skip files that already exist instead of failing"`
+	Force       bool              `json:"force,omitempty" jsonschema:"when true, overwrite files that already exist instead of failing"`
 }
 
 type lintInput struct {
@@ -32,6 +34,12 @@ type lintInput struct {
 
 // NewServer creates an MCP server exposing joist's scaffolding tools.
 func NewServer(scaffolder service.ScaffolderCommands) *sdkmcp.Server {
+	session, err := NewSession()
+	if err != nil {
+		// If we can't create a session log, proceed without one.
+		session = nil
+	}
+
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{
 		Name:    "joist",
 		Title:   "joist — template-driven scaffolding",
@@ -48,13 +56,19 @@ Workflow:
   doc(template)                 → list its commands and descriptions
   doc(template, command)        → get the exact variables required
   execute(template, command, …) → scaffold the files
-  lint(template)                → validate a manifest after editing it`,
+  lint(template)                → validate a manifest after editing it
+  status                        → review the session log of all tool calls and file events
+
+Status: every tool call is logged to a .joist/<session-id>.jsonl file for the duration of
+this MCP session. Call status at any time to review what has been done so far, including
+which files were created, overwritten, or skipped during execute calls.`,
 	})
 
-	registerListTemplates(server, scaffolder)
-	registerDocTemplate(server, scaffolder)
-	registerExecuteTemplate(server, scaffolder)
-	registerLintTemplate(server, scaffolder)
+	registerListTemplates(server, scaffolder, session)
+	registerDocTemplate(server, scaffolder, session)
+	registerExecuteTemplate(server, scaffolder, session)
+	registerLintTemplate(server, scaffolder, session)
+	registerStatus(server, session)
 
 	return server
 }
@@ -64,7 +78,14 @@ func Serve(ctx context.Context, scaffolder service.ScaffolderCommands) error {
 	return NewServer(scaffolder).Run(ctx, &sdkmcp.StdioTransport{})
 }
 
-func registerListTemplates(server *sdkmcp.Server, scaffolder service.ScaffolderCommands) {
+func logCall(session *Session, tool string, params map[string]any, events []FileEvent) {
+	if session == nil {
+		return
+	}
+	_ = session.Log(tool, params, events)
+}
+
+func registerListTemplates(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "list",
 		Description: `ALWAYS call this tool before creating any new files, components, services, handlers,
@@ -84,6 +105,7 @@ When a relevant template exists, use it instead of writing files by hand:
 
 Only create files manually if no template covers the use case.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ struct{}) (*sdkmcp.CallToolResult, any, error) {
+		logCall(session, "list", nil, nil)
 		templates, err := scaffolder.ListTemplates(ctx)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
@@ -106,7 +128,7 @@ Only create files manually if no template covers the use case.`,
 	})
 }
 
-func registerDocTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands) {
+func registerDocTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "doc",
 		Description: `Show documentation for a joist template or one of its commands.
@@ -124,6 +146,7 @@ Two modes depending on which arguments you provide:
 
 Call this before execute whenever you need to know which params are required.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args docInput) (*sdkmcp.CallToolResult, any, error) {
+		logCall(session, "doc", map[string]any{"template": args.Template, "command": args.Command}, nil)
 		tmpl, err := scaffolder.GetTemplate(ctx, args.Template)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
@@ -178,7 +201,7 @@ Call this before execute whenever you need to know which params are required.`,
 	})
 }
 
-func registerExecuteTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands) {
+func registerExecuteTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "execute",
 		Description: `Execute a joist template command to scaffold (create) files from templates.
@@ -190,25 +213,49 @@ params must contain every variable declared in the command. Keys are case-sensit
 must start with a capital letter (e.g. {"Name": "catalog", "Port": "8080"}). Missing
 variables cause the tool to return an error listing exactly what is missing.
 
-Pre-flight check: the tool refuses to run if any target file already exists, preventing
-accidental overwrites.
+Pre-flight check: by default the tool refuses to run if any target file already exists,
+preventing accidental overwrites. Use skip=true to silently skip existing files or
+force=true to overwrite them.
 
 After files are written, any shell_commands defined in the manifest are handled based on
 run_commands:
   false (default) — commands are printed in the output for you or the user to run manually
   true            — commands are executed automatically via sh -c in the working directory
 
-The output reports all created files, optional per-command hints, and shell commands.`,
+The output reports all file events (created, overwritten, skipped), optional per-command
+hints, and shell commands.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args executeInput) (*sdkmcp.CallToolResult, any, error) {
 		params := args.Params
 		if params == nil {
 			params = map[string]string{}
 		}
+		opts := domain.ExecuteOptions{
+			RunCommands: args.RunCommands,
+			Skip:        args.Skip,
+			Force:       args.Force,
+		}
+		var fileEvents []domain.FileEvent
 		// Execute writes its output to os.Stdout. Capture it so that it can be
 		// returned as MCP tool content instead of leaking into the stdio transport.
 		out, err := captureStdout(func() error {
-			return scaffolder.Execute(ctx, args.Template, args.Command, params, args.RunCommands)
+			var execErr error
+			fileEvents, execErr = scaffolder.Execute(ctx, args.Template, args.Command, params, opts)
+			return execErr
 		})
+
+		// Convert domain file events to session file events for logging
+		var sessionEvents []FileEvent
+		for _, ev := range fileEvents {
+			sessionEvents = append(sessionEvents, FileEvent{Path: ev.Path, Action: ev.Action})
+		}
+		logCall(session, "execute", map[string]any{
+			"template": args.Template,
+			"command":  args.Command,
+			"params":   args.Params,
+			"skip":     args.Skip,
+			"force":    args.Force,
+		}, sessionEvents)
+
 		if err != nil {
 			text := strings.TrimSpace(out)
 			if text != "" {
@@ -222,7 +269,7 @@ The output reports all created files, optional per-command hints, and shell comm
 	})
 }
 
-func registerLintTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands) {
+func registerLintTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "lint",
 		Description: `Validate a joist template manifest and report any issues.
@@ -240,6 +287,7 @@ Use this when authoring or editing a template manifest to catch mistakes before 
 execute. The dir argument lets you lint templates outside the default
 .joist-templates/ directory. Pass all=true to lint every template at once.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args lintInput) (*sdkmcp.CallToolResult, any, error) {
+		logCall(session, "lint", map[string]any{"template": args.Template, "dir": args.Dir, "all": args.All}, nil)
 		if !args.All {
 			if args.Template == "" {
 				return errResult("template is required when all is false"), nil, nil
@@ -285,6 +333,28 @@ execute. The dir argument lets you lint templates outside the default
 			return errResult(sb.String()), nil, nil
 		}
 		return textResult(sb.String()), nil, nil
+	})
+}
+
+func registerStatus(server *sdkmcp.Server, session *Session) {
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name: "status",
+		Description: `Return the session log of all tool calls made during this MCP session.
+
+Each line is a JSON object with: timestamp, tool name, parameters, and any file events
+(created, overwritten, skipped) produced by execute calls.
+
+Use this to review what has been done so far, verify which files were affected, and
+confirm the current state of the scaffolding session.`,
+	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ struct{}) (*sdkmcp.CallToolResult, any, error) {
+		if session == nil {
+			return textResult("Session logging is not available."), nil, nil
+		}
+		text, err := session.Status()
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
+		return textResult(text), nil, nil
 	})
 }
 

@@ -31,3 +31,6 @@ go.work.sum
 # .idea/
 # .vscode/
 /joist
+
+# MCP session logs
+.joist/

@@ -31,8 +31,8 @@ func (m *mockScaffolder) GetTemplate(_ context.Context, name string) (domain.Tem
 	return domain.Template{}, &templateNotFoundError{name: name}
 }
 
-func (m *mockScaffolder) Execute(_ context.Context, _, _ string, _ map[string]string, _ bool) error {
-	return m.executeErr
+func (m *mockScaffolder) Execute(_ context.Context, _, _ string, _ map[string]string, _ domain.ExecuteOptions) ([]domain.FileEvent, error) {
+	return nil, m.executeErr
 }
 
 func (m *mockScaffolder) Lint(_ context.Context, _ string, _ string) []domain.LintError {

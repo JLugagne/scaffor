@@ -82,11 +82,12 @@ func getFuncMap() template.FuncMap {
 
 // Execute performs the scaffolding with dedup and hint aggregation.
 // After files are written, post_commands are resolved and either printed
-// (for the LLM/user to run manually) or executed directly when runCommands is true.
-func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string, runCommands bool) error {
+// (for the LLM/user to run manually) or executed directly when opts.RunCommands is true.
+// It returns a slice of FileEvent recording what happened to each target file.
+func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string, opts domain.ExecuteOptions) ([]domain.FileEvent, error) {
 	tmpl, err := h.GetTemplate(ctx, templateName)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cmdMap := make(map[string]domain.TemplateCommand)
@@ -95,18 +96,21 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 
 	if _, ok := cmdMap[commandName]; !ok {
-		return fmt.Errorf("command '%s' not found in template '%s'", commandName, templateName)
+		return nil, fmt.Errorf("command '%s' not found in template '%s'", commandName, templateName)
 	}
 
-	// Pre-flight check
-	if err := h.preFlightCheck(ctx, tmpl.Name, commandName, cmdMap, params); err != nil {
-		return err
+	// Pre-flight check (only when neither skip nor force is set)
+	if !opts.Skip && !opts.Force {
+		if err := h.preFlightCheck(ctx, tmpl.Name, commandName, cmdMap, params); err != nil {
+			return nil, err
+		}
 	}
 
 	// Execution
 	visited := make(map[string]bool)
 	var executedCommands []string
 	var createdFiles []string
+	var fileEvents []domain.FileEvent
 	var hints []string
 
 	funcMap := getFuncMap()
@@ -144,6 +148,21 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 				return err
 			}
 
+			// Check if file already exists (for skip/force handling)
+			_, existErr := h.fs.ReadFile(ctx, targetPath)
+			fileExists := existErr == nil
+
+			if fileExists {
+				if opts.Skip {
+					fileEvents = append(fileEvents, domain.FileEvent{Path: targetPath, Action: "skipped"})
+					continue
+				}
+				if !opts.Force {
+					return fmt.Errorf("file %s already exists (use --skip to skip or --force to overwrite)", targetPath)
+				}
+				// Force: fall through to overwrite
+			}
+
 			// Create directories
 			dir := filepath.Dir(targetPath)
 			if err := h.fs.MkdirAll(ctx, dir); err != nil {
@@ -172,6 +191,11 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			if err := h.fs.WriteFile(ctx, targetPath, content); err != nil {
 				return err
 			}
+			if fileExists {
+				fileEvents = append(fileEvents, domain.FileEvent{Path: targetPath, Action: "overwritten"})
+			} else {
+				fileEvents = append(fileEvents, domain.FileEvent{Path: targetPath, Action: "created"})
+			}
 			createdFiles = append(createdFiles, targetPath)
 		}
 
@@ -198,14 +222,14 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 
 	if err := executeNode(commandName); err != nil {
-		return err
+		return fileEvents, err
 	}
 
 	// Output summary
 	skippedCount := len(visited) - len(executedCommands)
-	fmt.Printf("Created files:\n")
-	for _, f := range createdFiles {
-		fmt.Printf("  %s\n", f)
+	fmt.Printf("File events:\n")
+	for _, ev := range fileEvents {
+		fmt.Printf("  [%s] %s\n", ev.Action, ev.Path)
 	}
 	fmt.Printf("\n")
 	for _, hint := range hints {
@@ -217,11 +241,11 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	for _, sc := range tmpl.ShellCommands {
 		cmdTmpl, err := template.New("shellcmd").Funcs(funcMap).Parse(sc.Command)
 		if err != nil {
-			return fmt.Errorf("failed to parse shell_command template %q: %w", sc.Command, err)
+			return fileEvents, fmt.Errorf("failed to parse shell_command template %q: %w", sc.Command, err)
 		}
 		var cmdBuf bytes.Buffer
 		if err := cmdTmpl.Execute(&cmdBuf, params); err != nil {
-			return fmt.Errorf("failed to render shell_command template %q: %w", sc.Command, err)
+			return fileEvents, fmt.Errorf("failed to render shell_command template %q: %w", sc.Command, err)
 		}
 		mode := sc.Mode
 		if mode == "" {
@@ -231,7 +255,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 	}
 
 	if len(shellCmds) == 0 {
-		return nil
+		return fileEvents, nil
 	}
 
 	// Resolve per-file and all-files variants of each shell_command.
@@ -265,11 +289,11 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 				data := map[string]string{"File": f, "Files": matchingFilesStr}
 				t, err := template.New("scfile").Funcs(funcMap).Parse(sc.command)
 				if err != nil {
-					return fmt.Errorf("failed to parse per-file shell_command %q: %w", sc.command, err)
+					return fileEvents, fmt.Errorf("failed to parse per-file shell_command %q: %w", sc.command, err)
 				}
 				var buf bytes.Buffer
 				if err := t.Execute(&buf, data); err != nil {
-					return fmt.Errorf("failed to render per-file shell_command %q: %w", sc.command, err)
+					return fileEvents, fmt.Errorf("failed to render per-file shell_command %q: %w", sc.command, err)
 				}
 				toRun = append(toRun, renderedCmd{rendered: buf.String()})
 			}
@@ -277,17 +301,17 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			data := map[string]string{"Files": matchingFilesStr}
 			t, err := template.New("scall").Funcs(funcMap).Parse(sc.command)
 			if err != nil {
-				return fmt.Errorf("failed to parse shell_command %q: %w", sc.command, err)
+				return fileEvents, fmt.Errorf("failed to parse shell_command %q: %w", sc.command, err)
 			}
 			var buf bytes.Buffer
 			if err := t.Execute(&buf, data); err != nil {
-				return fmt.Errorf("failed to render shell_command %q: %w", sc.command, err)
+				return fileEvents, fmt.Errorf("failed to render shell_command %q: %w", sc.command, err)
 			}
 			toRun = append(toRun, renderedCmd{rendered: buf.String()})
 		}
 	}
 
-	if runCommands {
+	if opts.RunCommands {
 		fmt.Printf("\nRunning shell commands:\n")
 		for _, rc := range toRun {
 			fmt.Printf("  $ %s\n", rc.rendered)
@@ -295,7 +319,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
+				return fileEvents, fmt.Errorf("shell_command %q failed: %w", rc.rendered, err)
 			}
 		}
 	} else {
@@ -306,7 +330,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 		fmt.Printf("\nRun with --run-commands to execute them automatically.\n")
 	}
 
-	return nil
+	return fileEvents, nil
 }
 
 func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, commandName string, cmdMap map[string]domain.TemplateCommand, params map[string]string) error {

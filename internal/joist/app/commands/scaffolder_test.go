@@ -91,7 +91,7 @@ func TestScaffolder_Execute(t *testing.T) {
 
 	t.Run("Execute Chain", func(t *testing.T) {
 		params := map[string]string{"AppName": "testapp"}
-		err := handler.Execute(ctx, "hexagonal", "bootstrap", params, false)
+		_, err := handler.Execute(ctx, "hexagonal", "bootstrap", params, domain.ExecuteOptions{})
 		require.NoError(t, err)
 
 		// Check files were created in mock FS
@@ -107,7 +107,7 @@ func TestScaffolder_Execute(t *testing.T) {
 		fs.files["cmd/conflict/main.go"] = []byte("exists")
 
 		params := map[string]string{"AppName": "conflict"}
-		err := handler.Execute(ctx, "hexagonal", "bootstrap", params, false)
+		_, err := handler.Execute(ctx, "hexagonal", "bootstrap", params, domain.ExecuteOptions{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
 	})
@@ -401,7 +401,7 @@ func TestScaffolder_Execute_Extra(t *testing.T) {
 		fs := &mockFS{files: make(map[string][]byte)}
 		setupTestTemplates(t, fs)
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "hexagonal", "nonexistent", map[string]string{"AppName": "x"}, false)
+		_, err := handler.Execute(ctx, "hexagonal", "nonexistent", map[string]string{"AppName": "x"}, domain.ExecuteOptions{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
@@ -416,7 +416,7 @@ commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.Error(t, err)
 	})
 
@@ -430,7 +430,7 @@ commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "..")
 	})
@@ -446,7 +446,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 	})
 
@@ -463,7 +463,7 @@ shell_commands:
     mode: per-file
 `)
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 	})
 
@@ -479,7 +479,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 	})
 }
@@ -556,7 +556,7 @@ func TestScaffolder_SafeDestination(t *testing.T) {
 				".joist-templates/tmpl/manifest.yaml": []byte(manifest),
 			}}
 			handler := commands.NewScaffolderHandler(fs)
-			err := handler.Execute(context.Background(), "tmpl", "do", map[string]string{}, false)
+			_, err := handler.Execute(context.Background(), "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
@@ -708,7 +708,7 @@ shell_commands:
 `),
 	}}
 	handler := commands.NewScaffolderHandler(fs)
-	err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, true)
+	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{RunCommands: true})
 	require.NoError(t, err)
 }
 
@@ -728,7 +728,7 @@ commands:
 		".joist-templates/tmpl/bad.go.tmpl": []byte(`{{ .Name | unknownfunc }}`),
 	}}
 	handler := commands.NewScaffolderHandler(fs)
-	err := handler.Execute(ctx, "tmpl", "do", map[string]string{"Name": "x"}, false)
+	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{"Name": "x"}, domain.ExecuteOptions{})
 	require.Error(t, err)
 }
 
@@ -749,7 +749,7 @@ commands:
       - destination: "out/file.go"
 `)
 	handler := commands.NewScaffolderHandler(fs)
-	err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pre-flight check failed on")
 }
@@ -898,7 +898,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 		// When pattern is applied, only .go files should be in {{ .Files }}
 		// This is verified by the test not panicking and shell command being printed
@@ -919,7 +919,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 	})
 
@@ -939,7 +939,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 		// Should only run on .go files in per-file mode
 	})
@@ -958,7 +958,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 		// Should succeed even though no files match the pattern
 	})
@@ -976,7 +976,7 @@ shell_commands:
 `),
 		}}
 		handler := commands.NewScaffolderHandler(fs)
-		err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, false)
+		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 		// Both files should be in {{ .Files }} when no pattern is specified
 	})

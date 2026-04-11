@@ -131,6 +131,8 @@ the post_commands that will run after scaffolding.`,
 func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 	var sets []string
 	var runCommands bool
+	var skip bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "execute <template> <command> [--set Key=Value ...]",
@@ -139,6 +141,9 @@ func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
 
 A template command copies and renders files, substituting any declared variables
 with the values you supply via --set.
+
+By default the command refuses to run if any target file already exists. Use
+--skip to silently skip existing files or --force to overwrite them.
 
 After files are written, post_commands defined in the manifest are displayed
 so that you (or your LLM) can run them. Pass --run-commands to execute them
@@ -154,7 +159,13 @@ Post-commands support two modes:
   joist execute service create --set Name=catalog --set Port=8080
 
   # Run post-commands automatically
-  joist execute service create --set Name=catalog --run-commands`,
+  joist execute service create --set Name=catalog --run-commands
+
+  # Skip files that already exist
+  joist execute service create --set Name=catalog --skip
+
+  # Overwrite files that already exist
+  joist execute service create --set Name=catalog --force`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -204,12 +215,20 @@ Post-commands support two modes:
 				return fmt.Errorf("missing required variables")
 			}
 
-			return scaffolder.Execute(ctx, templateName, commandName, params, runCommands)
+			opts := domain.ExecuteOptions{
+				RunCommands: runCommands,
+				Skip:        skip,
+				Force:       force,
+			}
+			_, err = scaffolder.Execute(ctx, templateName, commandName, params, opts)
+			return err
 		},
 	}
 
 	cmd.Flags().StringSliceVar(&sets, "set", nil, "Set a variable value (format: Key=Value). Repeat for multiple variables.")
 	cmd.Flags().BoolVar(&runCommands, "run-commands", false, "Execute post_commands automatically via the shell instead of printing them.")
+	cmd.Flags().BoolVar(&skip, "skip", false, "Skip files that already exist instead of failing.")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite files that already exist instead of failing.")
 	return cmd
 }
 
