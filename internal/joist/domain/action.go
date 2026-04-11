@@ -27,6 +27,7 @@ type TemplateVariable struct {
 type TemplateFile struct {
 	Source      string `yaml:"source"`
 	Destination string `yaml:"destination"`
+	OnConflict  string `yaml:"on_conflict"` // "default", "skip", or "force"; empty means "default"
 }
 
 // LintError represents a single linting issue found in a template manifest.

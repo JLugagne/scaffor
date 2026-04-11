@@ -146,19 +146,30 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 				return err
 			}
 
-			// Check if file already exists (for skip/force handling)
+			// Check if file already exists (for skip/force handling).
+			// Per-file on_conflict overrides global --skip/--force flags.
 			_, existErr := h.fs.ReadFile(ctx, targetPath)
 			fileExists := existErr == nil
 
 			if fileExists {
-				if opts.Skip {
+				conflict := fileTmpl.OnConflict
+				if conflict == "" || conflict == "default" {
+					// Fall back to global flags.
+					if opts.Skip {
+						conflict = "skip"
+					} else if opts.Force {
+						conflict = "force"
+					}
+				}
+				switch conflict {
+				case "skip":
 					fileEvents = append(fileEvents, domain.FileEvent{Path: targetPath, Action: "skipped"})
 					continue
-				}
-				if !opts.Force {
+				case "force":
+					// Fall through to overwrite.
+				default:
 					return fmt.Errorf("file %s already exists (use --skip to skip or --force to overwrite)", targetPath)
 				}
-				// Force: fall through to overwrite
 			}
 
 			// Create directories
@@ -471,8 +482,17 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			}
 		}
 
-		// Check variables used in destination paths and validate parsing
+		// Check variables used in destination paths, validate parsing, and on_conflict values
 		for _, f := range cmd.Files {
+			// Validate on_conflict value
+			if f.OnConflict != "" && f.OnConflict != "default" && f.OnConflict != "skip" && f.OnConflict != "force" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "files.on_conflict",
+					Message: fmt.Sprintf("on_conflict %q is invalid for destination %q (must be \"default\", \"skip\", or \"force\")", f.OnConflict, f.Destination),
+				})
+			}
+
 			// Validate that the destination path parses as a template
 			if _, err := template.New("").Funcs(getFuncMap()).Parse(f.Destination); err != nil {
 				errs = append(errs, domain.LintError{

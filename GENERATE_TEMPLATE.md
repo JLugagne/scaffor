@@ -127,6 +127,7 @@ commands:
     files:
       - source: path/to/file.tmpl           # Relative to template dir; omit for empty file
         destination: path/to/{{ .Var }}/out  # Output path, supports template syntax
+        on_conflict: default                 # "default", "skip", or "force" (optional)
     post_commands:
       - other_command_name       # Chain to another command in this template
     shell_commands:              # Optional, per-command shell commands
@@ -152,6 +153,10 @@ shell_commands:                  # Optional, template-level, runs after all file
 - `source`: path to the `.tmpl` file relative to the template directory. Omit to create an empty file.
 - `destination`: output file path. Supports full template syntax including pipe functions.
   - Example: `internal/{{ .AppName }}/domain/{{ .Entity | lower }}.go`
+- `on_conflict`: controls what happens when the destination file already exists. Values:
+  - `default` (or omitted) — follows the global `--skip`/`--force` flags; blocks if neither is set
+  - `skip` — always skip this file silently, regardless of flags
+  - `force` — always overwrite this file, regardless of flags
 
 **`variables`** — Declared per-command. Each variable used in destinations, sources, or hints must be declared here.
 
@@ -288,5 +293,5 @@ Verify:
 - **Lowercase variable keys** — `{{ .entity }}` won't work. Use `{{ .Entity }}` and pipe to `lower` when needed.
 - **Over-templating** — don't replace constants with variables. If every entity lives under `internal/`, leave `internal/` hardcoded.
 - **Path traversal** — destinations containing `..` are rejected. All paths must be relative and downward.
-- **Existing files** — execution aborts if any destination file already exists (pre-flight check). This prevents accidental overwrites.
+- **Existing files** — execution aborts if any destination file already exists (pre-flight check). Use `--skip` to skip, `--force` to overwrite, or set `on_conflict` per file in the manifest to control behaviour at the template level.
 - **Skipping the linter** — always run `joist lint <template-name>` after writing or modifying a template. It catches syntax errors, undeclared variables, invalid patterns, and typos before execution.
