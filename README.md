@@ -103,7 +103,12 @@ Catches undeclared variables, broken references, invalid modes, and suggests cor
 
 ## Safety
 
-Shell commands are printed after execution but **never run** unless you explicitly pass `--run-commands`. The LLM sees the commands, asks the user for confirmation, and the human stays in the loop. Pre-flight checks abort if any destination file already exists. Directory traversal (`..`) is rejected.
+> **Templates can execute arbitrary shell commands.** Both per-command `shell_commands` and template-level `shell_commands` are run automatically by default after files are written. Review any template you did not author before running `joist execute`. Use `--dry-run` to print commands without executing them.
+
+- **Shell commands run by default.** Pass `--dry-run` to preview them without execution.
+- **Pre-flight checks** abort if any destination file already exists (use `--skip` or `--force` to override, or set `on_conflict` per file in the manifest).
+- **Directory traversal** (`..`) in destination paths is rejected.
+- **Treat templates like code.** A malicious template can run anything your shell can. Only use templates from sources you trust.
 
 ## Installation
 
