@@ -149,6 +149,21 @@ shell_commands:                  # Optional, template-level, runs after all file
   - command: "goimports -w {{ .Files }}"
     mode: all                    # "all" (default) or "per-file"
     pattern: "*.go"              # Optional: comma-separated glob patterns
+
+test:                            # Optional, executed by `scaffor test <template>` in a temp dir
+  - command: bootstrap
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+  - command: add_entity
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Entity: Book
+
+validate:                        # Optional, shell commands run in the temp dir after all test steps
+  - "go mod tidy"
+  - "go build ./..."
 ```
 
 ### Key Fields
@@ -176,6 +191,12 @@ shell_commands:                  # Optional, template-level, runs after all file
 **`shell_commands`** (per-command) — Same format as template-level `shell_commands` (with `command`, `mode`, `pattern` fields), but rendered with the command's variables instead of `{{ .File }}`/`{{ .Files }}`. Runs after this command's files are written. Useful for formatting, code generation, or any post-processing specific to a command.
 
 **`hint`** — Rendered after execution. Use it to tell the user (or an AI agent) what was created and what to do next. Supports template syntax.
+
+**`test`** — Template-level. List of `{command, params}` steps executed by `scaffor test <template>` in a throwaway temp directory (force-overwrite is enabled so re-runs are clean). Coverage is reported as `N of M commands exercised`. Aim for every command in the manifest to appear at least once.
+
+**`validate`** — Template-level. List of shell commands run (via `sh -c`) in the temp dir after all test steps complete. A non-zero exit fails the test. Typical entries:
+- For Go templates: `go mod tidy`, `go build ./...`, `go vet ./...`
+- For any template: `test -f path/to/expected_file` to assert a file was generated
 
 **`shell_commands`** — Template-level (not per-command). Runs after all files are written.
 - `command`: The shell command to run. Supports `{{ .File }}` and `{{ .Files }}` placeholders.
@@ -265,7 +286,44 @@ The linter checks:
 
 Fix every lint error before considering the template done.
 
-## Step 7: Test Execution
+## Step 7: Write a Test Block
+
+Every non-trivial template should ship with a `test:` block so `scaffor test <template>` can exercise it end-to-end in a temp directory, and a `validate:` block that asserts the generated output is correct.
+
+```yaml
+test:
+  - command: bootstrap
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+  - command: add_entity
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Entity: Book
+
+validate:
+  - "go mod tidy"
+  - "go build ./..."
+```
+
+Guidelines:
+
+- **Aim for 100% command coverage.** `scaffor test` reports `N of M commands exercised` — add a step for every command in the manifest.
+- **Order matters.** Incremental commands (e.g. `add_entity`) typically depend on a `bootstrap` step running first.
+- **Pick realistic params.** Use values that mirror what a real user would pass; if templates rely on specific casing or module paths, reflect that here.
+- **Validate what matters.** For Go templates, compile with `go build ./...`. For doc/asset templates, assert key files exist with `test -f`. Validation failures surface real bugs — don't skip this.
+- **Scope shell commands with `pattern:`.** If a template-level `shell_command` like `goimports -w {{ .Files }}` would choke on non-Go files (e.g. `go.mod`), add `pattern: "*.go"` so the test doesn't fail spuriously.
+
+Run it:
+
+```bash
+scaffor test <template-name>
+```
+
+A passing run ends with `PASS: <template-name>`. Put it in CI alongside `scaffor lint`.
+
+## Step 8: Test Execution
 
 Dry-run the template:
 
