@@ -96,3 +96,27 @@ commands:
 
       Insert each symbol into the corresponding <section> in the HTML.
       The page is self-contained — just open it in a browser.
+
+test:
+  - command: init
+    params:
+      ProjectName: TestProject
+      ModulePath: github.com/test/testproject
+      AccentColor: "4f46e5"
+  - command: gen_package_page
+    params:
+      ProjectName: TestProject
+      AccentColor: "4f46e5"
+  - command: add_package
+    params:
+      ProjectName: TestProject
+      PackageName: service
+      PackagePath: internal/service
+      AccentColor: "4f46e5"
+
+validate:
+  - "test -f examples/godoc-html/index.html"
+  - "test -f examples/godoc-html/style.css"
+  - "test -f examples/godoc-html/app.js"
+  - "test -f examples/godoc-html/packages/_template.html"
+  - "test -f examples/godoc-html/packages/service.html"

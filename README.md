@@ -57,6 +57,42 @@ Each command creates files deterministically and prints a `hint` — a structure
 
 **Feed it to your agent:** copy the contents of [`AI_INSTRUCTIONS.md`](./AI_INSTRUCTIONS.md) into your agent's system prompt (`.cursorrules`, `.clinerules`, AGENTS.md) to make it instantly aware of scaffor.
 
+## MCP server
+
+scaffor ships with a built-in [Model Context Protocol](https://modelcontextprotocol.io) server so MCP-aware clients (Claude Code, Cursor, etc.) can drive scaffolding directly — no CLI parsing, no shell wrapper.
+
+```bash
+scaffor mcp
+```
+
+The server communicates over stdio and exposes four tools:
+
+| Tool | Purpose |
+|------|---------|
+| `list` | list all templates in `.scaffor-templates/` |
+| `doc` | show documentation for a template or a specific command (use `all=true` to dump every command's variables at once) |
+| `execute` | execute a template command with the given variables; supports `dry_run`, `skip`, `force` |
+| `lint` | validate a template manifest |
+| `test` | run the template's test block in a temp directory |
+| `status` | review the session log of tool calls and file events |
+
+Each session is logged to `.scaffor/<session-id>.jsonl` so the agent can review what was created, overwritten, or skipped.
+
+**Configure it** in your MCP client (example for Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "scaffor": {
+      "command": "scaffor",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Once connected, the server advertises its own instructions telling the agent to always call `list` before writing files manually.
+
 ## Templates
 
 A template is a directory with a `manifest.yaml` that declares commands, variables, files, and hints:

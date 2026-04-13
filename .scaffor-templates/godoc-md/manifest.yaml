@@ -97,3 +97,24 @@ commands:
         1. Read the symbols from graph output
         2. Query each symbol with --body
         3. Paste signatures and doc comments into the markdown sections
+
+test:
+  - command: init
+    params:
+      ProjectName: TestProject
+      ModulePath: github.com/test/testproject
+  - command: gen_packages
+    params:
+      ProjectName: TestProject
+  - command: add_package_doc
+    params:
+      ProjectName: TestProject
+      PackageName: service
+      PackagePath: internal/service
+
+validate:
+  - "test -f examples/godoc-md/index.md"
+  - "test -f examples/godoc-md/_sidebar.md"
+  - "test -f examples/godoc-md/contributing.md"
+  - "test -f examples/godoc-md/packages/_template.md"
+  - "test -f examples/godoc-md/packages/service.md"

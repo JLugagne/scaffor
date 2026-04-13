@@ -166,3 +166,34 @@ commands:
 shell_commands:
   - command: "goimports -w {{ .Files }}"
     mode: all
+    pattern: "*.go"
+
+test:
+  - command: bootstrap
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+  - command: add_entity
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Entity: Book
+  - command: add_inbound
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Adapter: http
+  - command: add_outbound
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Adapter: postgres
+  - command: add_command
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Command: sync
+
+validate:
+  - "go mod tidy"
+  - "go build ./..."
