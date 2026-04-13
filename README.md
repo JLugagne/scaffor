@@ -1,10 +1,10 @@
-# joist
+# scaffor
 
 **Make LLM-driven development deterministic.**
 Save 10–50 LLM turns per feature by offloading boilerplate and structure to executable templates.
 
 ```bash
-joist execute hexagonal-cli add_entity --set Entity=User
+scaffor execute hexagonal-cli add_entity --set Entity=User
 ```
 ```
 Created files:
@@ -26,7 +26,7 @@ Structure enforced. Files in place. No planning required — the LLM just fills 
 
 ## Works with small models
 
-The examples in [`/examples/`](./examples/) were generated entirely by Claude Haiku using only `joist --help` as context — no custom instructions, no prompt engineering, no skills.
+The examples in [`/examples/`](./examples/) were generated entirely by Claude Haiku using only `scaffor --help` as context — no custom instructions, no prompt engineering, no skills.
 
 Well-written templates reduce the reasoning burden enough to drop from Opus to Sonnet or Haiku for the majority of tasks.
 
@@ -34,9 +34,9 @@ Well-written templates reduce the reasoning burden enough to drop from Opus to S
 
 LLMs are good at reasoning. They are inefficient at generating repetitive code, maintaining consistent structure across files, and planning multi-step scaffolding without drifting. This wastes tokens, adds unnecessary iterations, and produces inconsistent outputs.
 
-Without joist, the LLM plans the structure, creates files one by one, fixes mistakes, iterates, loses context, drifts from conventions. In a known codebase, that's 10–15 extra turns. In a project the agent discovers cold, easily 40–50.
+Without scaffor, the LLM plans the structure, creates files one by one, fixes mistakes, iterates, loses context, drifts from conventions. In a known codebase, that's 10–15 extra turns. In a project the agent discovers cold, easily 40–50.
 
-With joist, the LLM calls one command, structure is generated instantly, hints tell it what's next, and it focuses only on business logic.
+With scaffor, the LLM calls one command, structure is generated instantly, hints tell it what's next, and it focuses only on business logic.
 
 ## How it works
 
@@ -44,18 +44,18 @@ The LLM discovers what's available, executes, then writes logic.
 
 ```bash
 # 1. Discover
-joist list
-joist doc hexagonal-cli bootstrap
+scaffor list
+scaffor doc hexagonal-cli bootstrap
 
 # 2. Execute
-joist execute hexagonal-cli bootstrap --set AppName=myapp --set ModulePath=github.com/org/myapp
+scaffor execute hexagonal-cli bootstrap --set AppName=myapp --set ModulePath=github.com/org/myapp
 
 # 3. The LLM completes the generated code (business logic only)
 ```
 
 Each command creates files deterministically and prints a `hint` — a structured task list telling the LLM exactly what to do next. No planning required.
 
-**Feed it to your agent:** copy the contents of [`AI_INSTRUCTIONS.md`](./AI_INSTRUCTIONS.md) into your agent's system prompt (`.cursorrules`, `.clinerules`, AGENTS.md) to make it instantly aware of joist.
+**Feed it to your agent:** copy the contents of [`AI_INSTRUCTIONS.md`](./AI_INSTRUCTIONS.md) into your agent's system prompt (`.cursorrules`, `.clinerules`, AGENTS.md) to make it instantly aware of scaffor.
 
 ## Templates
 
@@ -76,7 +76,7 @@ commands:
     hint: |
       Entity {{ .Entity }} added.
       Now wire the handler in init.go and add a CLI command:
-        joist execute hexagonal-cli add_command --set Command={{ .Entity | lower }}
+        scaffor execute hexagonal-cli add_command --set Command={{ .Entity | lower }}
 
 shell_commands:
   - command: "goimports -w {{ .Files }}"
@@ -87,10 +87,10 @@ Templates are machine-readable, LLM-friendly, and composable via chained command
 
 ## Linting
 
-`joist lint` validates templates statically before execution:
+`scaffor lint` validates templates statically before execution:
 
 ```
-$ joist lint broken-template
+$ scaffor lint broken-template
 LINT ERRORS in broken-template:
 
   command "create", field "files.destination": variable "Nme" used but not declared (did you mean "Name"?)
@@ -103,7 +103,7 @@ Catches undeclared variables, broken references, invalid modes, and suggests cor
 
 ## Safety
 
-> **Templates can execute arbitrary shell commands.** Both per-command `shell_commands` and template-level `shell_commands` are run automatically by default after files are written. Review any template you did not author before running `joist execute`. Use `--dry-run` to print commands without executing them.
+> **Templates can execute arbitrary shell commands.** Both per-command `shell_commands` and template-level `shell_commands` are run automatically by default after files are written. Review any template you did not author before running `scaffor execute`. Use `--dry-run` to print commands without executing them.
 
 - **Shell commands run by default.** Pass `--dry-run` to preview them without execution.
 - **Pre-flight checks** abort if any destination file already exists. Override globally with `--skip` (skip existing) or `--force` (overwrite), or per file with `on_conflict` in the manifest:
@@ -116,22 +116,22 @@ Catches undeclared variables, broken references, invalid modes, and suggests cor
 ## Installation
 
 ```bash
-go install github.com/JLugagne/joist/cmd/joist@latest
+go install github.com/JLugagne/scaffor/cmd/scaffor@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/JLugagne/joist.git
-cd joist
-go build -o joist ./cmd/joist
+git clone https://github.com/JLugagne/scaffor.git
+cd scaffor
+go build -o scaffor ./cmd/scaffor
 ```
 
 Shell completion:
 
 ```bash
-joist completion bash > /etc/bash_completion.d/joist
-joist completion zsh > "${fpath[1]}/_joist"
+scaffor completion bash > /etc/bash_completion.d/scaffor
+scaffor completion zsh > "${fpath[1]}/_scaffor"
 ```
 
 ## Documentation

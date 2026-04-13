@@ -1,4 +1,4 @@
-# joist Usage Guide
+# scaffor Usage Guide
 
 This document details all available commands, their flags, and how to use them effectively.
 
@@ -10,68 +10,68 @@ All flags use the standard `--long-name` form.
 
 Template-driven project orchestration. Templates define a set of commands, variables, and file generation rules. They also support `post_commands` (shell commands to run after files are written) and contextual `hints` to guide users or AI agents through the next steps of development.
 
-Templates are stored in `.joist-templates/<template-name>/manifest.yaml`. See `README.md` for a guide on creating your own templates.
+Templates are stored in `.scaffor-templates/<template-name>/manifest.yaml`. See `README.md` for a guide on creating your own templates.
 
 ```bash
 # List all available templates
-joist list
+scaffor list
 
 # Lint a template manifest for issues before executing
-joist lint <template>
+scaffor lint <template>
 
 # Lint a template in a custom directory
-joist lint -d <templates-dir> <template>
+scaffor lint -d <templates-dir> <template>
 
 # Show documentation for a template (lists all its commands)
-joist doc <template>
+scaffor doc <template>
 
 # Show documentation for a specific command (shows required variables and post_commands)
-joist doc <template> <command>
+scaffor doc <template> <command>
 
 # Execute a command (post_commands are printed for manual review)
-joist execute <template> <command> [--set Key=Value ...]
+scaffor execute <template> <command> [--set Key=Value ...]
 
 # Execute a command and run post_commands automatically via shell
-joist execute <template> <command> [--set Key=Value ...] --run-commands
+scaffor execute <template> <command> [--set Key=Value ...] --run-commands
 ```
 
 **Examples:**
 ```bash
 # See what templates are available
-joist list
+scaffor list
 
 # Validate the 'hexagonal' template before running it
-joist lint hexagonal
+scaffor lint hexagonal
 
 # Read what the 'bootstrap' command does
-joist doc hexagonal bootstrap
+scaffor doc hexagonal bootstrap
 
 # Execute it, passing the required variables
-joist execute hexagonal bootstrap --set AppName=catalog --set ModulePath=github.com/myorg/myapp
+scaffor execute hexagonal bootstrap --set AppName=catalog --set ModulePath=github.com/myorg/myapp
 
 # Execute and run post_commands automatically
-joist execute hexagonal bootstrap --set AppName=catalog --run-commands
+scaffor execute hexagonal bootstrap --set AppName=catalog --run-commands
 ```
 
 ### Lint
 
-`joist lint <template>` validates a template manifest and reports all issues found:
+`scaffor lint <template>` validates a template manifest and reports all issues found:
 
 - **Invalid post_commands** — a post_command has an empty `command` or an invalid `mode` (must be `"all"` or `"per-file"`)
 - **Undeclared variables in destination paths** — `{{ .Foo }}` used in a `files.destination` but `Foo` is not in the command's `variables` list
 - **Undeclared variables in source templates** — `{{ .Foo }}` used inside a template file but `Foo` is not declared
 
 **Flags:**
-- `--dir, -d <path>` — Specify a custom template directory (default: `.joist-templates`)
+- `--dir, -d <path>` — Specify a custom template directory (default: `.scaffor-templates`)
 
 ```
-$ joist lint hexagonal
+$ scaffor lint hexagonal
 OK: hexagonal has no issues
 
-$ joist lint -d my-templates hexagonal
+$ scaffor lint -d my-templates hexagonal
 OK: hexagonal has no issues
 
-$ joist lint broken-template
+$ scaffor lint broken-template
 LINT ERRORS in broken-template:
 
   command "create", field "post_commands": post_command[0] has an empty command
@@ -139,7 +139,7 @@ commands:
         mode: all        # or "per-file"
     hint: |
       Message printed after execution. Rendered as a template.
-      Next: run joist execute <template> next-command --set AppName={{ .AppName }}
+      Next: run scaffor execute <template> next-command --set AppName={{ .AppName }}
 ```
 
 ### Template functions
@@ -152,8 +152,8 @@ commands:
 
 ### Best practices for AI agents
 
-1. **Always lint first:** `joist lint <template>` before executing
-2. **Read doc before execute:** `joist doc <template> <command>` shows required variables
+1. **Always lint first:** `scaffor lint <template>` before executing
+2. **Read doc before execute:** `scaffor doc <template> <command>` shows required variables
 3. **Follow hints:** After execution, hints tell you what to do next — read them carefully
 4. **Granular commands:** Prefer many small commands over one large generator
 5. **Safety:** Pre-flight checks abort if any destination file already exists

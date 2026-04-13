@@ -1,4 +1,4 @@
-module github.com/JLugagne/joist
+module github.com/JLugagne/scaffor
 
 go 1.25.0
 

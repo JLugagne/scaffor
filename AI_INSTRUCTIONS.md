@@ -1,6 +1,6 @@
-# joist AI Instructions
+# scaffor AI Instructions
 
-To help AI agents (like Claude, GPT-4, Cursor, or Copilot) use `joist` effectively in your project, copy the following instructions into your project's `.cursorrules`, `AI_INSTRUCTIONS.md`, or system prompt.
+To help AI agents (like Claude, GPT-4, Cursor, or Copilot) use `scaffor` effectively in your project, copy the following instructions into your project's `.cursorrules`, `AI_INSTRUCTIONS.md`, or system prompt.
 
 ---
 
@@ -9,41 +9,41 @@ To help AI agents (like Claude, GPT-4, Cursor, or Copilot) use `joist` effective
 ```markdown
 # Scaffolding Rules
 
-You are working in a project that uses `joist` for template-driven scaffolding. Before creating files manually, ALWAYS check if a template exists that can do it better.
+You are working in a project that uses `scaffor` for template-driven scaffolding. Before creating files manually, ALWAYS check if a template exists that can do it better.
 
 ## 1. Discovering Templates
 
 Always start by listing available templates:
 ```bash
-joist list
+scaffor list
 ```
 
 Read the documentation for a template before executing it:
 ```bash
 # All commands in a template
-joist doc <template_name>
+scaffor doc <template_name>
 
 # Specific command (shows required variables and post_commands)
-joist doc <template_name> <command_name>
+scaffor doc <template_name> <command_name>
 ```
 
 ## 2. Linting Before Executing
 
 Always lint a template before running it:
 ```bash
-joist lint <template_name>
+scaffor lint <template_name>
 ```
 
 ## 3. Executing Scaffolding
 
 ```bash
-joist execute <template> <command> --set Key=Value [--set Key2=Value2 ...]
+scaffor execute <template> <command> --set Key=Value [--set Key2=Value2 ...]
 ```
 
 Example:
 ```bash
-joist doc hexagonal bootstrap
-joist execute hexagonal bootstrap \
+scaffor doc hexagonal bootstrap
+scaffor execute hexagonal bootstrap \
   --set AppName=catalog \
   --set ModulePath=github.com/myorg/myapp
 ```
@@ -70,7 +70,7 @@ Available template functions:
 When asked to create new files or project structure:
 
 ```
-1. Is joist available?
+1. Is scaffor available?
    NO  → Create files manually
    YES → Continue
 
@@ -78,12 +78,12 @@ When asked to create new files or project structure:
    NO  → Create files manually
    YES → Continue
 
-3. Run: joist list
+3. Run: scaffor list
    Templates exist for this task?
    NO  → Create files manually (or create a new template if the pattern is reusable)
    YES → Continue
 
-4. Run: joist doc <template> <command>
+4. Run: scaffor doc <template> <command>
    Command matches the need?
    YES → Lint, execute, and follow hints
    NO  → Create files manually or add a new command to the template

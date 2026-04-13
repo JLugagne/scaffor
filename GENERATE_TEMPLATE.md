@@ -1,13 +1,13 @@
-# Generate Joist Template from Existing Code
+# Generate Scaffor Template from Existing Code
 
-Step-by-step instructions for creating a `.joist-templates/<name>/manifest.yaml` and its `.tmpl` files by extracting patterns from existing source code.
+Step-by-step instructions for creating a `.scaffor-templates/<name>/manifest.yaml` and its `.tmpl` files by extracting patterns from existing source code.
 
 ## Overview
 
-A joist template is a reusable scaffold. It lives in `.joist-templates/<template-name>/` and contains:
+A scaffor template is a reusable scaffold. It lives in `.scaffor-templates/<template-name>/` and contains:
 
 ```
-.joist-templates/<template-name>/
+.scaffor-templates/<template-name>/
 ├── manifest.yaml          # Commands, variables, file mappings, hints
 ├── some/path/file.go.tmpl # Template files with Go text/template syntax
 └── another/file.tmpl
@@ -249,7 +249,7 @@ hint: |
 **IMPORTANT: Always run the linter before considering a template done.**
 
 ```bash
-joist lint <template-name>
+scaffor lint <template-name>
 ```
 
 The linter checks:
@@ -270,9 +270,9 @@ Fix every lint error before considering the template done.
 Dry-run the template:
 
 ```bash
-joist doc <template-name>                    # See available commands and variables
-joist doc <template-name> <command>           # See required variables for a command
-joist execute <template-name> <command> --set Key=Value --set Key2=Value2
+scaffor doc <template-name>                    # See available commands and variables
+scaffor doc <template-name> <command>           # See required variables for a command
+scaffor execute <template-name> <command> --set Key=Value --set Key2=Value2
 ```
 
 Verify:
@@ -289,12 +289,12 @@ Verify:
 **Goal**: the user has a Go project with `internal/myapp/domain/order.go`, `internal/myapp/domain/repositories/order/order.go`, and `internal/myapp/outbound/order/order.go`. They want a template so they can add new entities with the same structure.
 
 1. Read all three files, identify what changes per entity (`Order` → variable, `myapp` → variable, module path → variable)
-2. Create `.joist-templates/my-template/manifest.yaml` with an `add_entity` command declaring `AppName`, `ModulePath`, `Entity`
+2. Create `.scaffor-templates/my-template/manifest.yaml` with an `add_entity` command declaring `AppName`, `ModulePath`, `Entity`
 3. Copy each file as `.tmpl`, replacing `Order` with `{{ .Entity }}`, `order` with `{{ .Entity | lower }}`, `myapp` with `{{ .AppName }}`, and the module path with `{{ .ModulePath }}`
 4. Set destinations using template syntax: `internal/{{ .AppName }}/domain/{{ .Entity | lower }}.go`
 5. Write a hint listing what was created and next steps
-6. Run `joist lint my-template` and fix any issues
-7. Test with `joist execute my-template add_entity --set AppName=myapp --set ModulePath=github.com/org/repo --set Entity=Product`
+6. Run `scaffor lint my-template` and fix any issues
+7. Test with `scaffor execute my-template add_entity --set AppName=myapp --set ModulePath=github.com/org/repo --set Entity=Product`
 
 ---
 
@@ -305,4 +305,4 @@ Verify:
 - **Over-templating** — don't replace constants with variables. If every entity lives under `internal/`, leave `internal/` hardcoded.
 - **Path traversal** — destinations containing `..` are rejected. All paths must be relative and downward.
 - **Existing files** — execution aborts if any destination file already exists (pre-flight check). Use `--skip` to skip, `--force` to overwrite, or set `on_conflict` per file in the manifest to control behaviour at the template level.
-- **Skipping the linter** — always run `joist lint <template-name>` after writing or modifying a template. It catches syntax errors, undeclared variables, invalid patterns, and typos before execution.
+- **Skipping the linter** — always run `scaffor lint <template-name>` after writing or modifying a template. It catches syntax errors, undeclared variables, invalid patterns, and typos before execution.
