@@ -137,6 +137,32 @@ LINT ERRORS in broken-template:
 
 Catches undeclared variables, broken references, invalid modes, and suggests corrections via Levenshtein distance. Runs in milliseconds — put it in CI.
 
+## Testing templates
+
+`scaffor test <template>` runs the manifest's `test:` block in a throwaway temp directory, so you can validate a template end-to-end without touching your project. It then runs any `validate:` shell commands in that same temp directory and reports command coverage.
+
+```yaml
+test:
+  - command: bootstrap
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+  - command: add_entity
+    params:
+      AppName: testapp
+      ModulePath: github.com/test/testapp
+      Entity: Book
+
+validate:
+  - "go mod tidy"
+  - "go build ./..."
+```
+
+- **`test:`** — list of `{command, params}` steps. Each is executed in order with `force: true` so re-runs are clean. Coverage is reported as `N of M commands exercised`.
+- **`validate:`** — list of shell commands run after all test steps. A non-zero exit fails the test. Use it to compile, run `go vet`, check generated files with `test -f`, etc.
+
+Put it in CI alongside `scaffor lint` to catch template regressions before they hit a real project.
+
 ## Safety
 
 > **Templates can execute arbitrary shell commands.** Both per-command `shell_commands` and template-level `shell_commands` are run automatically by default after files are written. Review any template you did not author before running `scaffor execute`. Use `--dry-run` to print commands without executing them.
