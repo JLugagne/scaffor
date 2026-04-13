@@ -865,7 +865,7 @@ func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Copy .scaffor-templates/<template>/ into the temp dir
 	srcDir := filepath.Join(".scaffor-templates", templateName)
@@ -882,7 +882,7 @@ func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error
 	if err := os.Chdir(tmpDir); err != nil {
 		return fmt.Errorf("failed to change to temp directory: %w", err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create a new handler with a real filesystem for the temp dir
 	tmpFS := outboundfs.NewFileSystem()
@@ -934,7 +934,7 @@ func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error
 }
 
 func copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, 0755); err != nil {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
 	entries, err := os.ReadDir(src)
@@ -953,7 +953,7 @@ func copyDir(src, dst string) error {
 			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(dstPath, data, 0644); err != nil {
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
 				return err
 			}
 		}
