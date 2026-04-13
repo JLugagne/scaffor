@@ -263,10 +263,6 @@ scaffor completion zsh  > "${fpath[1]}/_scaffor"
 
 <div align="center">
 
-**If scaffor makes your agent more reliable, give it a ⭐ — it helps others find it.**
-
-Built for the era of AI-driven development.
-
-[MIT License](LICENSE)
+[MIT License](LICENSE) · Feedback and contributions welcome
 
 </div>
