@@ -268,18 +268,30 @@ Runs the full scenario in a throwaway directory. Executes validation commands. R
 
 ## Installation
 
+All install paths below are **userspace** — no `sudo`, no system directories touched.
+
 ```bash
-# Recommended
+# Recommended: one-liner (Linux, macOS, WSL). Installs to ~/.local/bin.
+curl -sSL https://raw.githubusercontent.com/JLugagne/scaffor/main/install.sh | sh
+
+# Or pick a specific version / install directory:
+curl -sSL https://raw.githubusercontent.com/JLugagne/scaffor/main/install.sh \
+  | VERSION=v0.5.0 BINDIR=$HOME/bin sh
+
+# Via Go (builds from source, installs to $GOBIN or ~/go/bin)
 go install github.com/JLugagne/scaffor/cmd/scaffor@latest
 
 # From source
 git clone https://github.com/JLugagne/scaffor.git
 cd scaffor && go build -o scaffor ./cmd/scaffor
 
-# Shell completion
-scaffor completion bash > /etc/bash_completion.d/scaffor
+# Shell completion (userspace locations)
+scaffor completion bash > ~/.local/share/bash-completion/completions/scaffor
 scaffor completion zsh  > "${fpath[1]}/_scaffor"
+scaffor completion fish > ~/.config/fish/completions/scaffor.fish
 ```
+
+If `~/.local/bin` is not on your `$PATH`, the installer prints the exact line to add to your shell rc.
 
 ---
 

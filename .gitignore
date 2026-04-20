@@ -34,3 +34,6 @@ go.work.sum
 
 # MCP session logs
 .scaffor/
+
+# GoReleaser build output
+dist/

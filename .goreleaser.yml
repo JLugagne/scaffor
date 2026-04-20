@@ -1,0 +1,100 @@
+version: 2
+
+project_name: scaffor
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: scaffor
+    main: ./cmd/scaffor
+    binary: scaffor
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    ids: [scaffor]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}darwin
+      {{- else if eq .Os "linux" }}linux
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}amd64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - USAGE.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: "^.*(feat|add)[(\\w)]*:?.+$"
+      order: 0
+    - title: Bug fixes
+      regexp: "^.*fix[(\\w)]*:?.+$"
+      order: 1
+    - title: Other changes
+      order: 999
+
+release:
+  github:
+    owner: JLugagne
+    name: scaffor
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  header: |
+    ## scaffor {{ .Tag }}
+
+    ### Install (userspace, no root needed)
+
+    ```sh
+    curl -sSL https://raw.githubusercontent.com/JLugagne/scaffor/main/install.sh | sh
+    ```
+
+    Or with Go:
+
+    ```sh
+    go install github.com/JLugagne/scaffor/cmd/scaffor@{{ .Tag }}
+    ```
+  footer: |
+    **Full Changelog**: https://github.com/JLugagne/scaffor/compare/{{ .PreviousTag }}...{{ .Tag }}
