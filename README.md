@@ -16,7 +16,7 @@ same inputs → same files → same structure.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/JLugagne/scaffor)](https://github.com/JLugagne/scaffor/releases)
 
-[**Quick Start**](#quick-start) • [**Why**](#why-scaffor) • [**MCP**](#-mcp-server) • [**Templates**](#templates) • [**Safety**](#-safety)
+[**Quick Start**](#quick-start) • [**Why**](#why-scaffor) • [**Configuration**](#configuration) • [**MCP**](#-mcp-server) • [**Templates**](#templates) • [**Safety**](#-safety)
 
 </div>
 
@@ -84,8 +84,8 @@ Templates are **linted statically** (`scaffor lint`) and **tested end-to-end in 
 ## Quick Start
 
 ```bash
-# Install
-go install github.com/JLugagne/scaffor/cmd/scaffor@latest
+# Install (userspace, no root)
+curl -sSL https://raw.githubusercontent.com/JLugagne/scaffor/main/install.sh | sh
 
 # Discover
 scaffor list
@@ -109,7 +109,10 @@ scaffor reads a global config at `~/.config/scaffor/config.yml` (or `$XDG_CONFIG
 # Write a commented example config
 scaffor init-config
 
-# Edit it to point at your template directories
+# Open the config in your editor ($EDITOR, falling back to $VISUAL)
+scaffor edit-config
+
+# Or edit it directly:
 cat > ~/.config/scaffor/config.yml <<EOF
 template_sources:
   - path: ~/work/scaffor-templates
@@ -144,7 +147,7 @@ Six tools over stdio:
 
 | Tool | Purpose |
 |---|---|
-| `list` | Enumerate templates in `.scaffor-templates/` |
+| `list` | Enumerate templates from all configured sources (or `.scaffor-templates/` if no config) |
 | `doc` | Show docs for a template or command (`all=true` dumps every variable) |
 | `execute` | Run a command with variables. Supports `dry_run`, `skip`, `force` |
 | `lint` | Validate a template manifest |
