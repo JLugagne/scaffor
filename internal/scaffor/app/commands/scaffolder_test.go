@@ -5,11 +5,71 @@ import (
 	"os"
 	"strings"
 	"testing"
+
 	"github.com/JLugagne/scaffor/internal/scaffor/app/commands"
+	"github.com/JLugagne/scaffor/internal/scaffor/config"
 	"github.com/JLugagne/scaffor/internal/scaffor/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newHandler wires a mockFS / mockFSWithReadError to a resolver scoped to
+// ".scaffor-templates", auto-discovering template names from the mock FS'
+// files map so tests don't have to list them explicitly.
+func newHandler(fs filesystemShim) *commands.ScaffolderHandler {
+	names := discoverTemplateNames(fs)
+	r := config.NewResolverForTest(".scaffor-templates", names...)
+	return commands.NewScaffolderHandler(fs, r)
+}
+
+// filesystemShim is the subset of the domain filesystem interface accepted
+// by the handler — just a type alias for readability in tests.
+type filesystemShim = interface {
+	ReadFile(ctx context.Context, path string) ([]byte, error)
+	WriteFile(ctx context.Context, path string, content []byte) error
+	MkdirAll(ctx context.Context, path string) error
+}
+
+// discoverTemplateNames inspects a mock FS and returns the set of template
+// names found under ".scaffor-templates/<name>/manifest.yaml". Uses
+// reflection-free duck typing: expects the mock to expose a `files` map via
+// the well-known types used in this test file.
+func discoverTemplateNames(fs filesystemShim) []string {
+	seen := map[string]struct{}{}
+	switch m := fs.(type) {
+	case *mockFS:
+		for path := range m.files {
+			if name, ok := parseTemplateName(path); ok {
+				seen[name] = struct{}{}
+			}
+		}
+	case *mockFSWithReadError:
+		for path := range m.files {
+			if name, ok := parseTemplateName(path); ok {
+				seen[name] = struct{}{}
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	return out
+}
+
+// parseTemplateName extracts "<name>" from ".scaffor-templates/<name>/..."
+// paths, returning ok=true when the path falls under .scaffor-templates/.
+func parseTemplateName(path string) (string, bool) {
+	const prefix = ".scaffor-templates/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+	rest := path[len(prefix):]
+	if i := strings.Index(rest, "/"); i > 0 {
+		return rest[:i], true
+	}
+	return "", false
+}
 
 func setupTestTemplates(t *testing.T, fs *mockFS) {
 	err := os.MkdirAll(".scaffor-templates/hexagonal", 0755)
@@ -66,7 +126,7 @@ func TestScaffolder_GetTemplate(t *testing.T) {
 	setupTestTemplates(t, fs)
 	setupCycleTemplate(t, fs)
 
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 
 	t.Run("Valid Manifest", func(t *testing.T) {
 		tmpl, err := handler.GetTemplate(context.Background(), "hexagonal")
@@ -86,7 +146,7 @@ func TestScaffolder_Execute(t *testing.T) {
 	fs := &mockFS{files: make(map[string][]byte)}
 	setupTestTemplates(t, fs)
 
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	ctx := context.Background()
 
 	t.Run("Execute Chain", func(t *testing.T) {
@@ -208,7 +268,7 @@ func TestScaffolder_Lint(t *testing.T) {
 	fs := &mockFS{files: make(map[string][]byte)}
 	setupLintTemplates(t, fs)
 
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	ctx := context.Background()
 
 	t.Run("Valid template returns no errors", func(t *testing.T) {
@@ -322,7 +382,7 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 	t.Run("no .scaffor-templates dir returns empty slice", func(t *testing.T) {
 		_ = os.RemoveAll(".scaffor-templates")
 		fs := &mockFS{files: make(map[string][]byte)}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		templates, err := handler.ListTemplates(ctx)
 		require.NoError(t, err)
 		assert.Empty(t, templates)
@@ -331,7 +391,7 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 	t.Run("valid templates are returned", func(t *testing.T) {
 		fs := &mockFS{files: make(map[string][]byte)}
 		setupTestTemplates(t, fs)
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 
 		require.NoError(t, os.MkdirAll(".scaffor-templates/hexagonal", 0755))
 		t.Cleanup(func() { _ = os.RemoveAll(".scaffor-templates") })
@@ -344,31 +404,16 @@ func TestScaffolder_ListTemplates(t *testing.T) {
 
 	t.Run("template with invalid manifest is still listed", func(t *testing.T) {
 		fs := &mockFS{files: make(map[string][]byte)}
-		// manifest missing entirely — GetTemplate will error, ListTemplates includes stub
-		handler := commands.NewScaffolderHandler(fs)
-
-		require.NoError(t, os.MkdirAll(".scaffor-templates/broken", 0755))
-		t.Cleanup(func() { _ = os.RemoveAll(".scaffor-templates") })
+		// Manifest missing entirely — GetTemplate will error, ListTemplates includes stub.
+		// Manually register "broken" with the resolver since the mock FS is empty.
+		r := config.NewResolverForTest(".scaffor-templates", "broken")
+		handler := commands.NewScaffolderHandler(fs, r)
 
 		templates, err := handler.ListTemplates(ctx)
 		require.NoError(t, err)
 		require.Len(t, templates, 1)
 		assert.Equal(t, "broken", templates[0].Name)
 		assert.Empty(t, templates[0].Commands)
-	})
-
-	t.Run("os.ReadDir error (non-NotExist) is returned", func(t *testing.T) {
-		fs := &mockFS{files: make(map[string][]byte)}
-		handler := commands.NewScaffolderHandler(fs)
-
-		// Place a regular file where .scaffor-templates should be a directory;
-		// os.ReadDir on a file returns an error that is not os.IsNotExist.
-		require.NoError(t, os.WriteFile(".scaffor-templates", []byte("not a dir"), 0644))
-		t.Cleanup(func() { _ = os.Remove(".scaffor-templates") })
-
-		_, err := handler.ListTemplates(ctx)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to read .scaffor-templates")
 	})
 }
 
@@ -379,7 +424,7 @@ func TestScaffolder_GetTemplate_Extra(t *testing.T) {
 		fs := &mockFS{files: map[string][]byte{
 			".scaffor-templates/bad/manifest.yaml": []byte(":\tinvalid: yaml: ["),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.GetTemplate(ctx, "bad")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse manifest")
@@ -389,7 +434,7 @@ func TestScaffolder_GetTemplate_Extra(t *testing.T) {
 		fs := &mockFS{files: map[string][]byte{
 			".scaffor-templates/mytemplate/manifest.yaml": []byte("commands: []\n"),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		tmpl, err := handler.GetTemplate(ctx, "mytemplate")
 		require.NoError(t, err)
 		assert.Equal(t, "mytemplate", tmpl.Name)
@@ -402,7 +447,7 @@ func TestScaffolder_Execute_Extra(t *testing.T) {
 	t.Run("unknown command returns error", func(t *testing.T) {
 		fs := &mockFS{files: make(map[string][]byte)}
 		setupTestTemplates(t, fs)
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "hexagonal", "nonexistent", map[string]string{"AppName": "x"}, domain.ExecuteOptions{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
@@ -417,7 +462,7 @@ commands:
       - destination: "{{ .Bad | unknownfunc }}"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.Error(t, err)
 	})
@@ -431,7 +476,7 @@ commands:
       - destination: "../../etc/passwd"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "..")
@@ -447,7 +492,7 @@ shell_commands:
   - command: "echo hello"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -464,7 +509,7 @@ shell_commands:
   - command: "echo {{ .File }}"
     mode: per-file
 `)
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -480,7 +525,7 @@ shell_commands:
   - command: "echo {{ .Files }}"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -493,7 +538,7 @@ func TestScaffolder_Lint_Extra(t *testing.T) {
 		fs := &mockFS{files: map[string][]byte{
 			".scaffor-templates/bad/manifest.yaml": []byte(":\tinvalid: yaml: ["),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "bad", "")
 		require.NotEmpty(t, errs)
 		assert.Equal(t, "manifest", errs[0].Field)
@@ -507,7 +552,7 @@ shell_commands:
   - command: ""
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -527,7 +572,7 @@ shell_commands:
     mode: "badmode"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -557,7 +602,7 @@ func TestScaffolder_SafeDestination(t *testing.T) {
 			fs := &mockFS{files: map[string][]byte{
 				".scaffor-templates/tmpl/manifest.yaml": []byte(manifest),
 			}}
-			handler := commands.NewScaffolderHandler(fs)
+			handler := newHandler(fs)
 			_, err := handler.Execute(context.Background(), "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 			if tt.wantErr {
 				require.Error(t, err)
@@ -589,7 +634,7 @@ commands:
 `),
 			".scaffor-templates/tmpl/tmpl.go.tmpl": []byte(tmplContent),
 		}}
-		return commands.NewScaffolderHandler(fs)
+		return newHandler(fs)
 	}
 
 	t.Run("if-else node: declared variable not flagged", func(t *testing.T) {
@@ -639,7 +684,7 @@ commands:
       - destination: "{{ .Unclosed"
 `),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	// Should not panic; lint may report parse error or nothing for that field.
 	_ = handler.Lint(ctx, "tmpl", "")
 }
@@ -662,7 +707,7 @@ commands:
       - destination: "{{ .Missing }}/out.go"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -685,7 +730,7 @@ commands:
       - destination: "{{ .VeryLongUndeclaredVariableName }}/out.go"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -709,7 +754,7 @@ shell_commands:
   - command: "true"
 `),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 	require.NoError(t, err)
 }
@@ -729,7 +774,7 @@ commands:
 		// This template uses an unknown function, causing Parse to fail.
 		".scaffor-templates/tmpl/bad.go.tmpl": []byte(`{{ .Name | unknownfunc }}`),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{"Name": "x"}, domain.ExecuteOptions{})
 	require.Error(t, err)
 }
@@ -750,7 +795,7 @@ commands:
     files:
       - destination: "out/file.go"
 `)
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pre-flight check failed on")
@@ -768,7 +813,7 @@ commands:
       - destination: "{{ .Unclosed"
 `),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	errs := handler.Lint(ctx, "tmpl", "")
 	found := false
 	for _, e := range errs {
@@ -796,7 +841,7 @@ commands:
 `),
 		".scaffor-templates/tmpl/bad.go.tmpl": []byte("package main\n{{ .Name | unknownfunc }}"),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	errs := handler.Lint(ctx, "tmpl", "")
 	found := false
 	for _, e := range errs {
@@ -822,7 +867,7 @@ commands:
     hint: "Created {{ .Name | unknownfunc }}"
 `),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	errs := handler.Lint(ctx, "tmpl", "")
 	found := false
 	for _, e := range errs {
@@ -844,7 +889,7 @@ shell_commands:
   - command: "gofmt {{ .Files | unknownfunc }}"
 `),
 	}}
-	handler := commands.NewScaffolderHandler(fs)
+	handler := newHandler(fs)
 	errs := handler.Lint(ctx, "tmpl", "")
 	found := false
 	for _, e := range errs {
@@ -899,7 +944,7 @@ shell_commands:
     pattern: "*.go"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -918,7 +963,7 @@ shell_commands:
     pattern: "*.js,*.tsx"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -938,7 +983,7 @@ shell_commands:
     pattern: "*.go"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -956,7 +1001,7 @@ shell_commands:
     pattern: "*.go"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -973,7 +1018,7 @@ shell_commands:
   - command: "echo {{ .Files }}"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{DryRun: true})
 		require.NoError(t, err)
 	})
@@ -996,7 +1041,7 @@ shell_commands:
   - command: "echo {{ .Files }}"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		// Execute (not dry-run) so the shell command actually runs.
 		// "echo ..." always succeeds and produces output.
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
@@ -1017,7 +1062,7 @@ shell_commands:
     mode: per-file
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 	})
@@ -1036,7 +1081,7 @@ shell_commands:
   - command: "echo {{ .Name }} {{ .Files }}"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "tmpl", "do", map[string]string{"Name": "hello"}, domain.ExecuteOptions{})
 		require.NoError(t, err)
 	})
@@ -1055,7 +1100,7 @@ shell_commands:
     pattern: "["
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -1075,7 +1120,7 @@ shell_commands:
     pattern: "*.go"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -1095,7 +1140,7 @@ shell_commands:
     pattern: "*.js,*.tsx"
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {
@@ -1115,7 +1160,7 @@ shell_commands:
     pattern: ""
 `),
 		}}
-		handler := commands.NewScaffolderHandler(fs)
+		handler := newHandler(fs)
 		errs := handler.Lint(ctx, "tmpl", "")
 		found := false
 		for _, e := range errs {

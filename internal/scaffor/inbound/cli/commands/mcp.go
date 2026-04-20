@@ -1,12 +1,11 @@
 package commands
 
 import (
-	"github.com/JLugagne/scaffor/internal/scaffor/domain/service"
 	scafformlcp "github.com/JLugagne/scaffor/internal/scaffor/inbound/mcp"
 	"github.com/spf13/cobra"
 )
 
-func NewMCPCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+func NewMCPCommand(factory ScaffolderFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "mcp",
 		Short: "Start the scaffor MCP server over stdio",
@@ -24,6 +23,10 @@ Tools exposed:
 
 Configure your MCP client to run: scaffor mcp`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			scaffolder, err := factory()
+			if err != nil {
+				return err
+			}
 			return scafformlcp.Serve(cmd.Context(), scaffolder)
 		},
 	}

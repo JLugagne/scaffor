@@ -101,6 +101,37 @@ Make your agent scaffor-aware: copy [`AI_INSTRUCTIONS.md`](AI_INSTRUCTIONS.md) i
 
 ---
 
+## Configuration
+
+scaffor reads a global config at `~/.config/scaffor/config.yml` (or `$XDG_CONFIG_HOME/scaffor/config.yml`) that declares directories it should scan for templates — so you don't have to copy templates into every project or pass `--templates-dir` each time.
+
+```bash
+# Write a commented example config
+scaffor init-config
+
+# Edit it to point at your template directories
+cat > ~/.config/scaffor/config.yml <<EOF
+template_sources:
+  - path: ~/work/scaffor-templates
+    description: Personal templates
+  - path: ~/work/team-scaffor-templates
+    description: Shared team templates
+EOF
+
+# Verify scaffor sees them
+scaffor config
+```
+
+Rules:
+- Paths support `~`, `$VAR`, and `${VAR}`. Relative paths are rejected.
+- First match wins. Duplicate template names across sources emit a stderr warning.
+- `--templates-dir <path>` overrides the config for a single invocation.
+- `--ignore-missing-sources` tolerates source directories that don't exist on disk (useful when one of your repos is temporarily unavailable).
+
+When no config is present, scaffor falls back to `.scaffor-templates/` in the current directory — unchanged behavior.
+
+---
+
 ## 🔌 MCP Server
 
 scaffor ships a built-in [Model Context Protocol](https://modelcontextprotocol.io) server. Claude Code, Cursor, and any MCP client drive scaffolding **natively** — no CLI parsing, no shell heuristics.

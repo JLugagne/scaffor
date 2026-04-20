@@ -9,32 +9,45 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListTemplatesCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+// ScaffolderFactory builds a ScaffolderCommands on demand. Commands invoke it
+// in RunE so the resolver is constructed after global flags are parsed.
+type ScaffolderFactory func() (service.ScaffolderCommands, error)
+
+func NewListTemplatesCommand(factory ScaffolderFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List all available scaffolding templates",
-		Long: `List all templates found in the .scaffor-templates/ directory.
+		Long: `List all templates found in .scaffor-templates/ and in every directory
+declared by template_sources in your global config (~/.config/scaffor/config.yml).
 
 Each template is a YAML manifest (manifest.yaml) inside its own subdirectory.
-The output shows each template's name and description so you can decide which
-one fits your use case, then explore it further with "scaffor doc <template>".`,
-		Example: `  # Show all templates in this project
+The output shows each template's name, origin, and description so you can decide
+which one fits your use case, then explore it further with "scaffor doc <template>".`,
+		Example: `  # Show all templates available in this project
   scaffor list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			scaffolder, err := factory()
+			if err != nil {
+				return err
+			}
 			templates, err := scaffolder.ListTemplates(ctx)
 			if err != nil {
 				return err
 			}
 
 			if len(templates) == 0 {
-				fmt.Println("No templates found in .scaffor-templates/")
+				fmt.Println("No templates found.")
 				return nil
 			}
 
 			fmt.Println("Available Templates:")
 			for _, tmpl := range templates {
-				fmt.Printf("\n- %s:\n", tmpl.Name)
+				fmt.Printf("\n- %s", tmpl.Name)
+				if tmpl.Source != "" {
+					fmt.Printf(" (from %s)", tmpl.Source)
+				}
+				fmt.Println(":")
 				if len(tmpl.Commands) == 0 && tmpl.Description == "" {
 					fmt.Println("    (manifest has errors — run scaffor lint to see details)")
 					continue
@@ -80,7 +93,7 @@ func printCommandDetail(cmd domain.TemplateCommand) {
 	}
 }
 
-func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+func NewDocCommand(factory ScaffolderFactory) *cobra.Command {
 	var showAll bool
 
 	cmd := &cobra.Command{
@@ -108,6 +121,10 @@ the post_commands that will run after scaffolding.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			scaffolder, err := factory()
+			if err != nil {
+				return err
+			}
 			tmpl, err := scaffolder.GetTemplate(ctx, args[0])
 			if err != nil {
 				return err
@@ -176,7 +193,7 @@ the post_commands that will run after scaffolding.`,
 	return cmd
 }
 
-func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+func NewExecuteCommand(factory ScaffolderFactory) *cobra.Command {
 	var sets []string
 	var dryRun bool
 	var skip bool
@@ -215,6 +232,10 @@ automatically. Pass --dry-run to print them without executing.`,
 			templateName := args[0]
 			commandName := args[1]
 
+			scaffolder, err := factory()
+			if err != nil {
+				return err
+			}
 			tmpl, err := scaffolder.GetTemplate(ctx, templateName)
 			if err != nil {
 				return err
@@ -275,7 +296,7 @@ automatically. Pass --dry-run to print them without executing.`,
 	return cmd
 }
 
-func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+func NewLintCommand(factory ScaffolderFactory) *cobra.Command {
 	var templateDir string
 	var lintAll bool
 
@@ -304,6 +325,10 @@ Checks include:
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			scaffolder, err := factory()
+			if err != nil {
+				return err
+			}
 
 			if lintAll {
 				templates, err := scaffolder.ListTemplates(ctx)
@@ -358,7 +383,7 @@ Checks include:
 	return cmd
 }
 
-func NewTestCommand(scaffolder service.ScaffolderCommands) *cobra.Command {
+func NewTestCommand(factory ScaffolderFactory) *cobra.Command {
 	var testAll bool
 
 	cmd := &cobra.Command{
@@ -382,6 +407,10 @@ temp directory to verify the template produces valid output.`,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			scaffolder, err := factory()
+			if err != nil {
+				return err
+			}
 
 			if testAll {
 				templates, err := scaffolder.ListTemplates(ctx)

@@ -115,12 +115,16 @@ Only create files manually if no template covers the use case.`,
 			return errResult(err.Error()), nil, nil
 		}
 		if len(templates) == 0 {
-			return textResult("No templates found in .scaffor-templates/"), nil, nil
+			return textResult("No templates found."), nil, nil
 		}
 		var sb strings.Builder
 		sb.WriteString("Available Templates:\n")
 		for _, tmpl := range templates {
-			fmt.Fprintf(&sb, "\n- %s:\n", tmpl.Name)
+			fmt.Fprintf(&sb, "\n- %s", tmpl.Name)
+			if tmpl.Source != "" {
+				fmt.Fprintf(&sb, " (from %s)", tmpl.Source)
+			}
+			sb.WriteString(":\n")
 			if len(tmpl.Commands) == 0 && tmpl.Description == "" {
 				sb.WriteString("    (manifest has errors — call lint to see details)\n")
 				continue

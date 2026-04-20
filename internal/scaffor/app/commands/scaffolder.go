@@ -12,6 +12,7 @@ import (
 	"text/template/parse"
 	"unicode"
 
+	"github.com/JLugagne/scaffor/internal/scaffor/config"
 	"github.com/JLugagne/scaffor/internal/scaffor/domain"
 	"github.com/JLugagne/scaffor/internal/scaffor/domain/repositories/filesystem"
 	outboundfs "github.com/JLugagne/scaffor/internal/scaffor/outbound/filesystem"
@@ -21,35 +22,31 @@ import (
 
 // ScaffolderHandler handles manifest-driven scaffolding.
 type ScaffolderHandler struct {
-	fs filesystem.FileSystem
+	fs       filesystem.FileSystem
+	resolver *config.Resolver
 }
 
-// NewScaffolderHandler creates a new ScaffolderHandler.
-func NewScaffolderHandler(fs filesystem.FileSystem) *ScaffolderHandler {
-	return &ScaffolderHandler{fs: fs}
+// NewScaffolderHandler creates a new ScaffolderHandler. When resolver is nil,
+// the handler falls back to looking in ./.scaffor-templates — this preserves
+// legacy behavior for callers that haven't adopted the config package.
+func NewScaffolderHandler(fs filesystem.FileSystem, resolver *config.Resolver) *ScaffolderHandler {
+	if resolver == nil {
+		resolver = config.NewResolverForDir(config.DefaultLocalTemplatesDir)
+	}
+	return &ScaffolderHandler{fs: fs, resolver: resolver}
 }
 
-// ListTemplates scans .scaffor-templates/ and returns all template directories.
-// Templates whose manifests fail to parse are still included (with name only)
-// so that lint --all can report the errors.
+// ListTemplates returns every template discovered across the resolver's
+// configured sources, deduplicated by name (first source wins — matching
+// GetTemplate's resolution order). Templates whose manifests fail to parse
+// are still included (with name + source only) so that lint --all can
+// report the errors.
 func (h *ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Template, error) {
 	var templates []domain.Template
-	files, err := os.ReadDir(".scaffor-templates")
-	if err != nil {
-		if os.IsNotExist(err) {
-			return templates, nil
-		}
-		return nil, fmt.Errorf("failed to read .scaffor-templates: %w", err)
-	}
-
-	for _, entry := range files {
-		if !entry.IsDir() {
-			continue
-		}
-		tmpl, err := h.GetTemplate(ctx, entry.Name())
+	for _, ref := range h.resolver.ListAll() {
+		tmpl, err := h.GetTemplate(ctx, ref.Name)
 		if err != nil {
-			// Include the template with just its name so lint --all can report the error.
-			templates = append(templates, domain.Template{Name: entry.Name()})
+			templates = append(templates, domain.Template{Name: ref.Name, Source: ref.Source})
 			continue
 		}
 		templates = append(templates, tmpl)
@@ -59,7 +56,11 @@ func (h *ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Templat
 
 func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string) (domain.Template, error) {
 	var tmpl domain.Template
-	path := filepath.Join(".scaffor-templates", templateName, "manifest.yaml")
+	dir, err := h.resolver.Resolve(templateName)
+	if err != nil {
+		return tmpl, fmt.Errorf("failed to locate template %s: %w", templateName, err)
+	}
+	path := filepath.Join(dir, templateName, "manifest.yaml")
 	data, err := h.fs.ReadFile(ctx, path)
 	if err != nil {
 		return tmpl, fmt.Errorf("failed to read manifest for template %s: %w", templateName, err)
@@ -70,6 +71,7 @@ func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string
 	if tmpl.Name == "" {
 		tmpl.Name = templateName
 	}
+	tmpl.Source = dir
 	if err := detectPostCommandCycle(tmpl); err != nil {
 		return tmpl, err
 	}
@@ -187,7 +189,7 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			// Write content
 			content := []byte("")
 			if fileTmpl.Source != "" {
-				tmplPath := filepath.Join(".scaffor-templates", tmpl.Name, fileTmpl.Source)
+				tmplPath := filepath.Join(tmpl.Source, tmpl.Name, fileTmpl.Source)
 				tmplData, err := h.fs.ReadFile(ctx, tmplPath)
 				if err != nil {
 					return fmt.Errorf("failed to read template %s: %w", tmplPath, err)
@@ -430,7 +432,11 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 	// Parse the manifest directly so we can report all issues even when the DAG is invalid.
 	var tmpl domain.Template
 	if templateDir == "" {
-		templateDir = ".scaffor-templates"
+		dir, err := h.resolver.Resolve(templateName)
+		if err != nil {
+			return []domain.LintError{{Field: "manifest", Message: fmt.Sprintf("failed to locate template %s: %v", templateName, err)}}
+		}
+		templateDir = dir
 	}
 	path := filepath.Join(templateDir, templateName, "manifest.yaml")
 	data, err := h.fs.ReadFile(ctx, path)
@@ -867,8 +873,9 @@ func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	// Copy .scaffor-templates/<template>/ into the temp dir
-	srcDir := filepath.Join(".scaffor-templates", templateName)
+	// Copy <source>/<template>/ into the temp dir under .scaffor-templates/<template>/
+	// so the test runs against a local resolver rooted at the temp dir.
+	srcDir := filepath.Join(tmpl.Source, templateName)
 	dstDir := filepath.Join(tmpDir, ".scaffor-templates", templateName)
 	if err := copyDir(srcDir, dstDir); err != nil {
 		return fmt.Errorf("failed to copy template to temp dir: %w", err)
@@ -884,9 +891,10 @@ func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error
 	}
 	defer func() { _ = os.Chdir(origDir) }()
 
-	// Create a new handler with a real filesystem for the temp dir
+	// Create a new handler scoped to .scaffor-templates/ inside the temp dir.
 	tmpFS := outboundfs.NewFileSystem()
-	tmpHandler := NewScaffolderHandler(tmpFS)
+	tmpResolver := config.NewResolverForDir(config.DefaultLocalTemplatesDir)
+	tmpHandler := NewScaffolderHandler(tmpFS, tmpResolver)
 
 	// Build set of all command names in the manifest
 	allCommands := make(map[string]bool)

@@ -9,6 +9,11 @@ type Template struct {
 	ShellCommands []ShellCommand    `yaml:"shell_commands"`
 	Test          []TestStep        `yaml:"test"`
 	Validate      []string          `yaml:"validate"`
+
+	// Source is the directory this template was loaded from (e.g.
+	// ".scaffor-templates" or "/home/me/work/scaffor-templates"). Set by the
+	// loader, not from YAML. Used to show provenance in `scaffor list`.
+	Source string `yaml:"-"`
 }
 
 type TemplateCommand struct {
