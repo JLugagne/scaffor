@@ -551,10 +551,14 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			tmplPath := filepath.Join(templateDir, tmpl.Name, f.Source)
 			data, err := h.fs.ReadFile(ctx, tmplPath)
 			if err != nil {
+				msg := fmt.Sprintf("cannot read template file %q: %v", f.Source, err)
+				if strings.Contains(f.Source, "{{") {
+					msg = fmt.Sprintf("source must be a literal path (Go templates in source are not supported) — use a Go template inside the source file itself, or split into multiple commands. Got: %q", f.Source)
+				}
 				errs = append(errs, domain.LintError{
 					Command: cmd.Command,
 					Field:   "files.source",
-					Message: fmt.Sprintf("cannot read template file %q: %v", f.Source, err),
+					Message: msg,
 				})
 				continue
 			}
@@ -910,7 +914,7 @@ func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error
 		if params == nil {
 			params = map[string]string{}
 		}
-		_, err := tmpHandler.Execute(ctx, templateName, step.Command, params, domain.ExecuteOptions{Force: true})
+		_, err := tmpHandler.Execute(ctx, templateName, step.Command, params, domain.ExecuteOptions{Force: true, DryRun: step.DryRun})
 		if err != nil {
 			return fmt.Errorf("test step %q failed: %w", step.Command, err)
 		}

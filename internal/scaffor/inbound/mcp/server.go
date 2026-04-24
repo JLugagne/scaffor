@@ -33,6 +33,18 @@ type lintInput struct {
 	All      bool   `json:"all,omitempty" jsonschema:"when true, lint every template in the directory; template is ignored"`
 }
 
+type batchItem struct {
+	Command string            `json:"command" jsonschema:"command name within the template"`
+	Params  map[string]string `json:"params,omitempty" jsonschema:"variables for this command; keys are case-sensitive and must start with a capital letter"`
+}
+
+type batchExecuteInput struct {
+	Template string      `json:"template" jsonschema:"name of the template directory under .scaffor-templates/"`
+	Steps    []batchItem `json:"steps" jsonschema:"ordered list of {command, params} pairs to execute sequentially"`
+	Skip     bool        `json:"skip,omitempty" jsonschema:"when true, silently skip files that already exist instead of failing"`
+	Force    bool        `json:"force,omitempty" jsonschema:"when true, overwrite files that already exist instead of failing"`
+}
+
 // NewServer creates an MCP server exposing scaffor's scaffolding tools.
 func NewServer(scaffolder service.ScaffolderCommands) *sdkmcp.Server {
 	session, err := NewSession()
@@ -57,10 +69,14 @@ Workflow:
   doc(template)                 → list its commands and descriptions
   doc(template, all=true)       → get variables for ALL commands at once (preferred)
   doc(template, command)        → get the exact variables for one command
-  execute(template, command, …) → scaffold the files
+  execute(template, command, …) → scaffold the files (use for a single command)
+  batch_execute(template, steps) → run many commands in one call (use when N > 1, e.g. 23 migrations)
   lint(template)                → validate a manifest after editing it
   test(template)                → run the template's test block in a temp directory
   status                        → review the session log of all tool calls and file events
+
+When you need to call the same command repeatedly (e.g. add_migration × N), always use
+batch_execute with all N steps in one call instead of N separate execute calls.
 
 Status: every tool call is logged to a .scaffor/<session-id>.jsonl file for the duration of
 this MCP session. Call status at any time to review what has been done so far, including
@@ -70,6 +86,7 @@ which files were created, overwritten, or skipped during execute calls.`,
 	registerListTemplates(server, scaffolder, session)
 	registerDocTemplate(server, scaffolder, session)
 	registerExecuteTemplate(server, scaffolder, session)
+	registerBatchExecute(server, scaffolder, session)
 	registerLintTemplate(server, scaffolder, session)
 	registerTestTemplate(server, scaffolder, session)
 	registerStatus(server, session)
@@ -313,6 +330,73 @@ optional per-command hints, and shell commands.`,
 	})
 }
 
+func registerBatchExecute(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name: "batch_execute",
+		Description: `Execute multiple scaffor template commands in a single call, sequentially.
+
+Use this instead of calling execute() N times when you need to run the same command
+repeatedly with different params (e.g. 23 add_migration calls). One batch_execute call
+replaces N round-trips.
+
+steps is an ordered array of {command, params} objects. Each step runs the same template
+(specified at the top level). Steps execute in order; if any step fails the batch stops
+and returns the error along with output accumulated so far.
+
+skip and force apply to every step (same semantics as in execute).
+
+The output reports each step's file events, hints, and shell command results in sequence.`,
+	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args batchExecuteInput) (*sdkmcp.CallToolResult, any, error) {
+		opts := domain.ExecuteOptions{
+			Skip:  args.Skip,
+			Force: args.Force,
+		}
+
+		var sb strings.Builder
+		var allSessionEvents []FileEvent
+
+		for i, step := range args.Steps {
+			params := step.Params
+			if params == nil {
+				params = map[string]string{}
+			}
+
+			var fileEvents []domain.FileEvent
+			out, err := captureStdout(func() error {
+				var execErr error
+				fileEvents, execErr = scaffolder.Execute(ctx, args.Template, step.Command, params, opts)
+				return execErr
+			})
+
+			for _, ev := range fileEvents {
+				allSessionEvents = append(allSessionEvents, FileEvent{Path: ev.Path, Action: ev.Action})
+			}
+
+			fmt.Fprintf(&sb, "=== step %d: %s/%s ===\n%s\n", i+1, args.Template, step.Command, out)
+
+			if err != nil {
+				logCall(session, "batch_execute", map[string]any{
+					"template": args.Template,
+					"steps":    args.Steps,
+					"skip":     args.Skip,
+					"force":    args.Force,
+				}, allSessionEvents)
+				sb.WriteString(err.Error())
+				return errResult(sb.String()), nil, nil
+			}
+		}
+
+		logCall(session, "batch_execute", map[string]any{
+			"template": args.Template,
+			"steps":    args.Steps,
+			"skip":     args.Skip,
+			"force":    args.Force,
+		}, allSessionEvents)
+
+		return textResult(sb.String()), nil, nil
+	})
+}
+
 func registerLintTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "lint",
@@ -449,6 +533,23 @@ func registerTestTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCo
 Each template can define a test block (list of commands with params to execute in order)
 and a validate block (list of shell commands that must exit 0). This tool runs them in a
 fresh temp directory to verify the template produces valid output.
+
+IMPORTANT — shell_commands run for real:
+The test block executes with Force=true. All actions in the manifest run as normal,
+including shell_commands (e.g. goimports, go mod tidy). Commands that require network
+access or external tooling (go mod tidy, docker, etc.) will fail in environments without
+those dependencies.
+
+To skip shell_commands for a test step, set dry_run: true on that step in the manifest:
+
+  test:
+    - command: bootstrap
+      dry_run: true   # generates files but skips shell_commands
+      params:
+        AppName: testapp
+
+The validate block always runs regardless of dry_run (it is meant for final checks like
+go build ./...).
 
 Pass all=true to test every template that has a test block defined.`,
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args testInput) (*sdkmcp.CallToolResult, any, error) {

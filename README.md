@@ -219,6 +219,16 @@ commands:
 **Language-agnostic:** Go, Python, TypeScript, Terraform, docs — any text file.
 **Go-template based:** with `lower`, `upper`, `title` helpers.
 
+### Scope of the built-in templates
+
+The bundled `hexagonal-cli` template targets **hexagonal architecture projects**. It enforces the `internal/<ctx>/domain/`, `app/`, `inbound/`, `outbound/` layout and assumes every command belongs to a bounded context.
+
+It is intentionally not designed for:
+- Utility binaries without a bounded context (e.g. `cmd/db-migrate`, `cmd/nats-setup`)
+- Non-hexagonal file layouts or arbitrary destination paths
+
+For one-off utility binaries, write them by hand or maintain a separate template in your own template source. Widening the built-in templates to cover general layouts would dilute their main value: **a strongly opinionated hexagonal contract that an agent can follow without improvising**.
+
 ### Post-command modes
 
 | Mode | Behavior |
@@ -248,13 +258,17 @@ LINT ERRORS in broken-template:
 
 Detects undeclared variables, broken references, invalid modes. Suggests fixes via Levenshtein distance. Runs in milliseconds — **put it in CI** so broken templates fail before they reach an agent's turn.
 
+**`source` must be a literal path** — Go templates are not supported in `source` values (only in `destination` and file contents). If you need conditional source files, put the conditional logic inside the template file itself, or split the command into two commands with different `source` paths.
+
 ### `scaffor test` — validate templates end-to-end
 
 ```yaml
 test:
   - command: bootstrap
+    dry_run: true   # generate files, skip shell_commands
     params: { AppName: testapp, ModulePath: github.com/test/testapp }
   - command: add_entity
+    dry_run: true
     params: { AppName: testapp, ModulePath: github.com/test/testapp, Entity: Book }
 
 validate:
@@ -263,6 +277,10 @@ validate:
 ```
 
 Runs the full scenario in a throwaway directory. Executes validation commands. Reports coverage (`N of M commands exercised`). Non-zero exit = failed template.
+
+**shell_commands run for real** — including `goimports`, `go mod tidy`, anything in `shell_commands`. Set `dry_run: true` on a step to generate its files but skip its shell_commands. The `validate` block always runs regardless of `dry_run` (it is meant for final checks like `go build`).
+
+Use `dry_run: true` when your template's shell_commands require network or external tooling that may not be available in CI. The `validate` block is the right place for checks that must succeed end-to-end.
 
 **Catch regressions before they hit a real project.**
 

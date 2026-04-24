@@ -68,4 +68,6 @@ type ShellCommand struct {
 type TestStep struct {
 	Command string            `yaml:"command"`
 	Params  map[string]string `yaml:"params"`
+	// when true, shell_commands are printed but not executed (same as Execute's DryRun)
+	DryRun bool `yaml:"dry_run,omitempty"`
 }

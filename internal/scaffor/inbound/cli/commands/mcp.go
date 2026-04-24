@@ -19,7 +19,9 @@ Tools exposed:
   list_templates   – list all templates in .scaffor-templates/
   doc_template     – show documentation for a template or command
   execute_template – execute a template command
+  batch_execute    – execute multiple commands in one call (cuts N round-trips to 1)
   lint_template    – lint a template manifest
+  test_template    – run a template's test block in a temp directory
 
 Configure your MCP client to run: scaffor mcp`,
 		RunE: func(cmd *cobra.Command, _ []string) error {

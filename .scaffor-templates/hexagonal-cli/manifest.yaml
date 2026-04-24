@@ -170,25 +170,30 @@ shell_commands:
 
 test:
   - command: bootstrap
+    dry_run: true
     params:
       AppName: testapp
       ModulePath: github.com/test/testapp
   - command: add_entity
+    dry_run: true
     params:
       AppName: testapp
       ModulePath: github.com/test/testapp
       Entity: Book
   - command: add_inbound
+    dry_run: true
     params:
       AppName: testapp
       ModulePath: github.com/test/testapp
       Adapter: http
   - command: add_outbound
+    dry_run: true
     params:
       AppName: testapp
       ModulePath: github.com/test/testapp
       Adapter: postgres
   - command: add_command
+    dry_run: true
     params:
       AppName: testapp
       ModulePath: github.com/test/testapp
