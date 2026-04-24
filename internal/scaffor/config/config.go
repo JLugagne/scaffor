@@ -49,6 +49,26 @@ func ResolvePath() (string, error) {
 	return filepath.Join(home, ".config", "scaffor", "config.yml"), nil
 }
 
+// FindLocalTemplatesDir walks up from cwd until it finds a .scaffor-templates
+// directory, returning its absolute path. Returns "" if none is found.
+func FindLocalTemplatesDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, DefaultLocalTemplatesDir)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
 // Load reads the config file from its default location. When no file exists,
 // it returns a zero-value Config with Loaded=false and no error, letting
 // callers fall back to the current directory's .scaffor-templates/.

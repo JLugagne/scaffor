@@ -101,11 +101,16 @@ func buildResolver(templatesDir string, ignoreMissing bool) (*config.Resolver, e
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if !cfg.Loaded || len(cfg.TemplateSources) == 0 {
-		return config.NewResolverForDir(config.DefaultLocalTemplatesDir), nil
+		return config.NewResolverForDir(config.FindLocalTemplatesDir()), nil
 	}
 	sources, err := cfg.ResolveSources()
 	if err != nil {
 		return nil, err
+	}
+	// Prepend the local templates dir (walked up from cwd) so local templates
+	// always shadow global ones with the same name.
+	if localDir := config.FindLocalTemplatesDir(); localDir != "" {
+		sources = append([]config.Source{{Path: localDir}}, sources...)
 	}
 	return config.NewResolverFromSources(sources, ignoreMissing)
 }
