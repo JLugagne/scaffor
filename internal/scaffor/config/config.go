@@ -51,23 +51,6 @@ func ResolvePath() (string, error) {
 
 // FindLocalTemplatesDir walks up from cwd until it finds a .scaffor-templates
 // directory, returning its absolute path. Returns "" if none is found.
-func FindLocalTemplatesDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		candidate := filepath.Join(dir, DefaultLocalTemplatesDir)
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-}
 
 // Load reads the config file from its default location. When no file exists,
 // it returns a zero-value Config with Loaded=false and no error, letting
@@ -185,4 +168,38 @@ template_sources: []
 #   - path: ~/work/team-scaffor-templates
 #     description: Shared team templates
 `
+}
+
+// FindLocalTemplatesDir walks up from cwd until it finds a .scaffor-templates
+// directory, returning its absolute path. Returns "" if none is found.
+func FindLocalTemplatesDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return FindLocalTemplatesDirFrom(dir)
+}
+
+// FindLocalTemplatesDirFrom walks up from startDir until it finds a
+// .scaffor-templates directory, returning its absolute path. Returns "" if none is found.
+func FindLocalTemplatesDirFrom(startDir string) string {
+	if startDir == "" {
+		var err error
+		startDir, err = os.Getwd()
+		if err != nil {
+			return ""
+		}
+	}
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, DefaultLocalTemplatesDir)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }

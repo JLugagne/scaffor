@@ -46,7 +46,7 @@ type batchExecuteInput struct {
 }
 
 // NewServer creates an MCP server exposing scaffor's scaffolding tools.
-func NewServer(scaffolder service.ScaffolderCommands) *sdkmcp.Server {
+func NewServer(factory ScaffolderFactory) *sdkmcp.Server {
 	session, err := NewSession()
 	if err != nil {
 		// If we can't create a session log, proceed without one.
@@ -83,20 +83,20 @@ this MCP session. Call status at any time to review what has been done so far, i
 which files were created, overwritten, or skipped during execute calls.`,
 	})
 
-	registerListTemplates(server, scaffolder, session)
-	registerDocTemplate(server, scaffolder, session)
-	registerExecuteTemplate(server, scaffolder, session)
-	registerBatchExecute(server, scaffolder, session)
-	registerLintTemplate(server, scaffolder, session)
-	registerTestTemplate(server, scaffolder, session)
+	registerListTemplates(server, factory, session)
+	registerDocTemplate(server, factory, session)
+	registerExecuteTemplate(server, factory, session)
+	registerBatchExecute(server, factory, session)
+	registerLintTemplate(server, factory, session)
+	registerTestTemplate(server, factory, session)
 	registerStatus(server, session)
 
 	return server
 }
 
 // Serve runs the MCP server over stdio.
-func Serve(ctx context.Context, scaffolder service.ScaffolderCommands) error {
-	return NewServer(scaffolder).Run(ctx, &sdkmcp.StdioTransport{})
+func Serve(ctx context.Context, factory ScaffolderFactory) error {
+	return NewServer(factory).Run(ctx, &sdkmcp.StdioTransport{})
 }
 
 func logCall(session *Session, tool string, params map[string]any, events []FileEvent) {
@@ -106,7 +106,7 @@ func logCall(session *Session, tool string, params map[string]any, events []File
 	_ = session.Log(tool, params, events)
 }
 
-func registerListTemplates(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+func registerListTemplates(server *sdkmcp.Server, factory ScaffolderFactory, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "list",
 		Description: `ALWAYS call this tool before creating any new files, components, services, handlers,
@@ -125,9 +125,13 @@ When a relevant template exists, use it instead of writing files by hand:
   4. execute(template, command, …) — scaffold the files
 
 Only create files manually if no template covers the use case.`,
-	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ struct{}) (*sdkmcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, _ struct{}) (*sdkmcp.CallToolResult, any, error) {
 		logCall(session, "list", nil, nil)
-		templates, err := scaffolder.ListTemplates(ctx)
+		s, err := resolveScaffolder(ctx, req, factory)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
+		templates, err := s.ListTemplates(ctx)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
@@ -186,7 +190,7 @@ func writeCommandDetail(sb *strings.Builder, cmd domain.TemplateCommand) {
 	}
 }
 
-func registerDocTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+func registerDocTemplate(server *sdkmcp.Server, factory ScaffolderFactory, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "doc",
 		Description: `Show documentation for a scaffor template or one of its commands.
@@ -204,9 +208,13 @@ Three modes depending on which arguments you provide:
 
 Call this before execute whenever you need to know which params are required.
 Prefer all=true when you need an overview of the entire template.`,
-	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args docInput) (*sdkmcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args docInput) (*sdkmcp.CallToolResult, any, error) {
 		logCall(session, "doc", map[string]any{"template": args.Template, "command": args.Command, "all": args.All}, nil)
-		tmpl, err := scaffolder.GetTemplate(ctx, args.Template)
+		s, err := resolveScaffolder(ctx, req, factory)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
+		tmpl, err := s.GetTemplate(ctx, args.Template)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
@@ -264,7 +272,7 @@ Prefer all=true when you need an overview of the entire template.`,
 	})
 }
 
-func registerExecuteTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+func registerExecuteTemplate(server *sdkmcp.Server, factory ScaffolderFactory, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "execute",
 		Description: `Execute a scaffor template command to scaffold (create) files from templates.
@@ -285,7 +293,11 @@ Set dry_run=true to print them without executing.
 
 The output reports all file events (created, overwritten, skipped), shell command results,
 optional per-command hints, and shell commands.`,
-	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args executeInput) (*sdkmcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args executeInput) (*sdkmcp.CallToolResult, any, error) {
+		s, err := resolveScaffolder(ctx, req, factory)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
 		params := args.Params
 		if params == nil {
 			params = map[string]string{}
@@ -300,7 +312,7 @@ optional per-command hints, and shell commands.`,
 		// returned as MCP tool content instead of leaking into the stdio transport.
 		out, err := captureStdout(func() error {
 			var execErr error
-			fileEvents, execErr = scaffolder.Execute(ctx, args.Template, args.Command, params, opts)
+			fileEvents, execErr = s.Execute(ctx, args.Template, args.Command, params, opts)
 			return execErr
 		})
 
@@ -330,7 +342,7 @@ optional per-command hints, and shell commands.`,
 	})
 }
 
-func registerBatchExecute(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+func registerBatchExecute(server *sdkmcp.Server, factory ScaffolderFactory, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "batch_execute",
 		Description: `Execute multiple scaffor template commands in a single call, sequentially.
@@ -346,7 +358,11 @@ and returns the error along with output accumulated so far.
 skip and force apply to every step (same semantics as in execute).
 
 The output reports each step's file events, hints, and shell command results in sequence.`,
-	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args batchExecuteInput) (*sdkmcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args batchExecuteInput) (*sdkmcp.CallToolResult, any, error) {
+		s, err := resolveScaffolder(ctx, req, factory)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
 		opts := domain.ExecuteOptions{
 			Skip:  args.Skip,
 			Force: args.Force,
@@ -364,7 +380,7 @@ The output reports each step's file events, hints, and shell command results in 
 			var fileEvents []domain.FileEvent
 			out, err := captureStdout(func() error {
 				var execErr error
-				fileEvents, execErr = scaffolder.Execute(ctx, args.Template, step.Command, params, opts)
+				fileEvents, execErr = s.Execute(ctx, args.Template, step.Command, params, opts)
 				return execErr
 			})
 
@@ -397,7 +413,7 @@ The output reports each step's file events, hints, and shell command results in 
 	})
 }
 
-func registerLintTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+func registerLintTemplate(server *sdkmcp.Server, factory ScaffolderFactory, session *Session) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "lint",
 		Description: `Validate a scaffor template manifest and report any issues.
@@ -414,13 +430,17 @@ Checks performed:
 Use this when authoring or editing a template manifest to catch mistakes before running
 execute. The dir argument lets you lint templates outside the default
 .scaffor-templates/ directory. Pass all=true to lint every template at once.`,
-	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args lintInput) (*sdkmcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args lintInput) (*sdkmcp.CallToolResult, any, error) {
 		logCall(session, "lint", map[string]any{"template": args.Template, "dir": args.Dir, "all": args.All}, nil)
+		s, err := resolveScaffolder(ctx, req, factory)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
 		if !args.All {
 			if args.Template == "" {
 				return errResult("template is required when all is false"), nil, nil
 			}
-			errs := scaffolder.Lint(ctx, args.Template, args.Dir)
+			errs := s.Lint(ctx, args.Template, args.Dir)
 			if len(errs) == 0 {
 				return textResult(fmt.Sprintf("OK: %s has no issues", args.Template)), nil, nil
 			}
@@ -433,7 +453,7 @@ execute. The dir argument lets you lint templates outside the default
 			return errResult(sb.String()), nil, nil
 		}
 
-		templates, err := scaffolder.ListTemplates(ctx)
+		templates, err := s.ListTemplates(ctx)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
@@ -444,7 +464,7 @@ execute. The dir argument lets you lint templates outside the default
 		var sb strings.Builder
 		totalErrors := 0
 		for _, tmpl := range templates {
-			errs := scaffolder.Lint(ctx, tmpl.Name, args.Dir)
+			errs := s.Lint(ctx, tmpl.Name, args.Dir)
 			if len(errs) == 0 {
 				fmt.Fprintf(&sb, "OK: %s has no issues\n", tmpl.Name)
 				continue
@@ -520,7 +540,7 @@ func captureStdout(fn func() error) (string, error) {
 	return string(out), fnErr
 }
 
-func registerTestTemplate(server *sdkmcp.Server, scaffolder service.ScaffolderCommands, session *Session) {
+func registerTestTemplate(server *sdkmcp.Server, factory ScaffolderFactory, session *Session) {
 	type testInput struct {
 		Template string `json:"template,omitempty" jsonschema:"name of the template to test; required unless all is true"`
 		All      bool   `json:"all,omitempty" jsonschema:"when true, test every template that has a test block"`
@@ -552,15 +572,18 @@ The validate block always runs regardless of dry_run (it is meant for final chec
 go build ./...).
 
 Pass all=true to test every template that has a test block defined.`,
-	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, args testInput) (*sdkmcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args testInput) (*sdkmcp.CallToolResult, any, error) {
 		logCall(session, "test", map[string]any{"template": args.Template, "all": args.All}, nil)
-
+		s, err := resolveScaffolder(ctx, req, factory)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
 		if !args.All {
 			if args.Template == "" {
 				return errResult("template is required when all is false"), nil, nil
 			}
 			out, err := captureStdout(func() error {
-				return scaffolder.Test(ctx, args.Template)
+				return s.Test(ctx, args.Template)
 			})
 			if err != nil {
 				text := strings.TrimSpace(out)
@@ -574,7 +597,7 @@ Pass all=true to test every template that has a test block defined.`,
 			return textResult(strings.TrimSpace(out) + "\nPASS: " + args.Template), nil, nil
 		}
 
-		templates, err := scaffolder.ListTemplates(ctx)
+		templates, err := s.ListTemplates(ctx)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
@@ -588,7 +611,7 @@ Pass all=true to test every template that has a test block defined.`,
 			}
 			tested++
 			out, err := captureStdout(func() error {
-				return scaffolder.Test(ctx, tmpl.Name)
+				return s.Test(ctx, tmpl.Name)
 			})
 			if err != nil {
 				failures++
@@ -616,4 +639,24 @@ Pass all=true to test every template that has a test block defined.`,
 		fmt.Fprintf(&sb, "\nAll %d template(s) passed", tested)
 		return textResult(sb.String()), nil, nil
 	})
+}
+
+// ScaffolderFactory builds a ScaffolderCommands for a given project directory.
+// An empty projectDir means fall back to os.Getwd().
+type ScaffolderFactory func(projectDir string) (service.ScaffolderCommands, error)
+
+// resolveScaffolder asks the MCP client for its roots, takes the first file://
+// URI as the project directory, and builds a ScaffolderCommands via factory.
+// Falls back to an empty projectDir (which makes the factory use os.Getwd()).
+func resolveScaffolder(ctx context.Context, req *sdkmcp.CallToolRequest, factory ScaffolderFactory) (service.ScaffolderCommands, error) {
+	projectDir := ""
+	if ss, ok := req.GetSession().(*sdkmcp.ServerSession); ok {
+		if result, err := ss.ListRoots(ctx, nil); err == nil && len(result.Roots) > 0 {
+			uri := result.Roots[0].URI
+			if after, ok := strings.CutPrefix(uri, "file://"); ok {
+				projectDir = after
+			}
+		}
+	}
+	return factory(projectDir)
 }

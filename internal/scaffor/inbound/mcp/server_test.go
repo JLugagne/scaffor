@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/JLugagne/scaffor/internal/scaffor/domain"
+	"github.com/JLugagne/scaffor/internal/scaffor/domain/service"
 	scafformlcp "github.com/JLugagne/scaffor/internal/scaffor/inbound/mcp"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,9 @@ func connectTestServer(t *testing.T, scaffolder *mockScaffolder) *sdkmcp.ClientS
 	t.Helper()
 	ctx := context.Background()
 
-	server := scafformlcp.NewServer(scaffolder)
+	server := scafformlcp.NewServer(func(_ string) (service.ScaffolderCommands, error) {
+		return scaffolder, nil
+	})
 	cTransport, sTransport := sdkmcp.NewInMemoryTransports()
 
 	ss, err := server.Connect(ctx, sTransport, nil)

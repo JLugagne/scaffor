@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewMCPCommand(factory ScaffolderFactory) *cobra.Command {
+func NewMCPCommand(factory scafformlcp.ScaffolderFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "mcp",
 		Short: "Start the scaffor MCP server over stdio",
@@ -25,11 +25,7 @@ Tools exposed:
 
 Configure your MCP client to run: scaffor mcp`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			scaffolder, err := factory()
-			if err != nil {
-				return err
-			}
-			return scafformlcp.Serve(cmd.Context(), scaffolder)
+			return scafformlcp.Serve(cmd.Context(), factory)
 		},
 	}
 }
