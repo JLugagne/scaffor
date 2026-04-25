@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>scaffor — Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1>scaffor</h1>
+      <p class="module-path">github.com/JLugagne/scaffor</p>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Packages</h3>
+      <ul id="package-list">
+        <li><a href="packages/init.html">internal/scaffor</a></li>
+        <li><a href="packages/commands.html">internal/scaffor/app/commands</a></li>
+        <li><a href="packages/domain.html">internal/scaffor/domain</a></li>
+        <li><a href="packages/filesystem.html">internal/scaffor/domain/repositories/filesystem</a></li>
+        <li><a href="packages/service.html">internal/scaffor/domain/service</a></li>
+        <li><a href="packages/cli-commands.html">internal/scaffor/inbound/cli/commands</a></li>
+        <li><a href="packages/mcp.html">internal/scaffor/inbound/mcp</a></li>
+        <li><a href="packages/outbound-filesystem.html">internal/scaffor/outbound/filesystem</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1>scaffor</h1>
+      <p>Module: <code>github.com/JLugagne/scaffor</code></p>
+    </header>
+
+    <section class="overview">
+      <h2>Package Overview</h2>
+      <div class="package-grid" id="package-grid">
+        <div class="package-card">
+          <h3>internal/scaffor</h3>
+          <p>CLI initialization and root command setup. Exposes the <code>Setup()</code> function that returns a configured CLI runner.</p>
+        </div>
+        <div class="package-card">
+          <h3>app/commands</h3>
+          <p>Application-level handlers for scaffolding operations. Contains <code>ScaffolderHandler</code> which orchestrates template execution, linting, and testing.</p>
+        </div>
+        <div class="package-card">
+          <h3>domain</h3>
+          <p>Core domain models: <code>Template</code>, <code>TemplateCommand</code>, <code>FileEvent</code>, and execution options. Defines the contract for all scaffolding operations.</p>
+        </div>
+        <div class="package-card">
+          <h3>domain/repositories/filesystem</h3>
+          <p>Filesystem repository interface. Abstracts file I/O for testability and multiple implementations.</p>
+        </div>
+        <div class="package-card">
+          <h3>domain/service</h3>
+          <p>Service interface that defines the contract for scaffolding commands: list, get, execute, lint, test.</p>
+        </div>
+        <div class="package-card">
+          <h3>inbound/cli/commands</h3>
+          <p>CLI command implementations using Cobra. Maps user commands to scaffolding operations.</p>
+        </div>
+        <div class="package-card">
+          <h3>inbound/mcp</h3>
+          <p>Model Context Protocol server implementation. Enables scaffor as an MCP tool for Claude and other AI agents.</p>
+        </div>
+        <div class="package-card">
+          <h3>outbound/filesystem</h3>
+          <p>Concrete filesystem implementation. Provides OS-level file I/O operations.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="quick-stats">
+      <h2>Project Structure</h2>
+      <!-- AGENT: Run go-surgeon graph --summary --deps
+           Fill in the counts below -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-number">8</span>
+          <span class="stat-label">Packages</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">12</span>
+          <span class="stat-label">Exported Types</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">20+</span>
+          <span class="stat-label">Functions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">2</span>
+          <span class="stat-label">Interfaces</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

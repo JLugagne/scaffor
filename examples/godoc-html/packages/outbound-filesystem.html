@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>outbound/filesystem — scaffor</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">scaffor</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#functions">Functions</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>internal/scaffor/outbound/filesystem</code></h1>
+      <p>Import: <code>github.com/JLugagne/scaffor/internal/scaffor/outbound/filesystem</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        Package filesystem provides a concrete implementation of the FileSystem repository interface using the operating system's file I/O. This is the outbound adapter that translates repository methods into actual filesystem operations.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>FileSystem</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>FileSystem is a concrete implementation of the filesystem repository interface.</p>
+          <pre><code>type FileSystem struct {
+    // No exported fields
+}</code></pre>
+          <p>Implements the <code>filesystem.FileSystem</code> interface from <code>domain/repositories/filesystem</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewFileSystem() *FileSystem</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewFileSystem creates a new FileSystem instance.</p>
+          <pre><code>func NewFileSystem() *FileSystem</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*FileSystem) ReadFile(ctx context.Context, path string) ([]byte, error)</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ReadFile reads the contents of a file from the filesystem.</p>
+          <pre><code>func (f *FileSystem) ReadFile(ctx context.Context, path string) ([]byte, error)</code></pre>
+          <p>Reads the entire file at the given path and returns its contents as a byte slice. Returns an error if the file does not exist or cannot be read.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*FileSystem) WriteFile(ctx context.Context, path string, content []byte) error</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>WriteFile writes data to a file on the filesystem.</p>
+          <pre><code>func (f *FileSystem) WriteFile(ctx context.Context, path string, content []byte) error</code></pre>
+          <p>Creates or overwrites the file at the given path with the provided contents. Returns an error if the file cannot be written.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*FileSystem) MkdirAll(ctx context.Context, path string) error</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>MkdirAll creates all parent directories as needed.</p>
+          <pre><code>func (f *FileSystem) MkdirAll(ctx context.Context, path string) error</code></pre>
+          <p>Equivalent to <code>mkdir -p</code>. Creates all missing parent directories leading to the target path. Returns an error if the directory cannot be created.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

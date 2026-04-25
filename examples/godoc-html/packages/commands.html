@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>app/commands — scaffor</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">scaffor</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#functions">Functions</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>internal/scaffor/app/commands</code></h1>
+      <p>Import: <code>github.com/JLugagne/scaffor/internal/scaffor/app/commands</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        Package commands provides the application-level handlers for scaffolding operations. It contains the <code>ScaffolderHandler</code> which orchestrates template discovery, execution, validation, and testing. This is the core orchestration layer that coordinates between the domain models and the filesystem.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>ScaffolderHandler</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ScaffolderHandler handles manifest-driven scaffolding operations.</p>
+          <pre><code>type ScaffolderHandler struct {
+    fs filesystem.FileSystem // Filesystem implementation
+}</code></pre>
+          <p>ScaffolderHandler is the main orchestrator that implements the <code>ScaffolderCommands</code> service interface. It coordinates template discovery, execution, validation, and testing.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewScaffolderHandler(fs FileSystem) *ScaffolderHandler</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewScaffolderHandler creates a new ScaffolderHandler with the given filesystem implementation.</p>
+          <pre><code>func NewScaffolderHandler(fs filesystem.FileSystem) *ScaffolderHandler</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Template, error)</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ListTemplates discovers and returns all available templates from the <code>.scaffor-templates/</code> directory.</p>
+          <pre><code>func (h *ScaffolderHandler) ListTemplates(ctx context.Context) ([]domain.Template, error)</code></pre>
+          <p>Returns a slice of all Template definitions found in the .scaffor-templates directory, or an error if the directory cannot be read.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*ScaffolderHandler) GetTemplate(ctx context.Context, templateName string) (domain.Template, error)</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>GetTemplate loads and returns a single template by name.</p>
+          <pre><code>func (h *ScaffolderHandler) GetTemplate(ctx context.Context, templateName string) (domain.Template, error)</code></pre>
+          <p>Reads the manifest.yaml file for the named template and returns the parsed Template object.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string, opts domain.ExecuteOptions) ([]domain.FileEvent, error)</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Execute runs a template command with the given parameters and options.</p>
+          <pre><code>func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandName string, params map[string]string, opts domain.ExecuteOptions) ([]domain.FileEvent, error)</code></pre>
+          <p>Executes template file transformations, variable substitution, and shell commands. Returns a list of FileEvents describing what was created, overwritten, or skipped.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*ScaffolderHandler) Lint(ctx context.Context, templateName string, templateDir string) []domain.LintError</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Lint validates a template manifest for errors.</p>
+          <pre><code>func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templateDir string) []domain.LintError</code></pre>
+          <p>Returns a slice of LintError objects describing any validation issues found in the template manifest.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*ScaffolderHandler) Test(ctx context.Context, templateName string) error</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Test executes the template's test block in a temporary directory to validate it works correctly.</p>
+          <pre><code>func (h *ScaffolderHandler) Test(ctx context.Context, templateName string) error</code></pre>
+          <p>Runs all test steps defined in the template's test block and validates the output using the validate commands. Returns an error if any test or validation step fails.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

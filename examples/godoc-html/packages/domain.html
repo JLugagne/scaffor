@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>domain — scaffor</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">scaffor</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#interfaces">Interfaces</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>internal/scaffor/domain</code></h1>
+      <p>Import: <code>github.com/JLugagne/scaffor/internal/scaffor/domain</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        Package domain defines the core data structures and contracts for the scaffor template system. It includes template definitions, commands, variables, file operations, and execution options. This package contains the entities and value objects that represent templates and the results of their execution.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>Template</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Template represents a complete scaffolding template manifest.</p>
+          <pre><code>type Template struct {
+    Name          string            // Template name
+    Description   string            // Template description
+    Commands      []TemplateCommand // Available commands
+    ShellCommands []ShellCommand    // Global shell commands
+    Test          []TestStep        // Test steps for validation
+    Validate      []string          // Validation commands
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TemplateCommand</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TemplateCommand defines a single command within a template.</p>
+          <pre><code>type TemplateCommand struct {
+    Command      string            // Command name
+    Description  string            // Command description
+    Variables    []TemplateVariable// Required variables
+    Files        []TemplateFile    // Files to create
+    PostCommands []string          // Commands to run after
+    ShellCommands []ShellCommand   // Shell commands for this command
+    Hint         string            // User-facing hint
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TemplateVariable</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TemplateVariable defines a template variable that must be provided at execution time.</p>
+          <pre><code>type TemplateVariable struct {
+    Key         string // Variable name
+    Description string // Variable description
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TemplateFile</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TemplateFile specifies a file to be created or modified during template execution.</p>
+          <pre><code>type TemplateFile struct {
+    Source    string // Template source file
+    Destination string // Target destination path
+    OnConflict string // Conflict resolution strategy
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>ShellCommand</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ShellCommand defines a shell command to execute during or after template application.</p>
+          <pre><code>type ShellCommand struct {
+    Command string // Shell command to execute
+    Mode    string // Execution mode (all, per-file, etc.)
+    Pattern string // Glob pattern for matching files
+    Silent  bool   // Suppress output
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>TestStep</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>TestStep defines a command and parameters to test a template.</p>
+          <pre><code>type TestStep struct {
+    Command string            // Command name to test
+    Params  map[string]string // Parameters to provide
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>LintError</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>LintError represents a validation error found during template linting.</p>
+          <pre><code>type LintError struct {
+    Command string // Command name
+    Field   string // Field with error
+    Message string // Error message
+}
+
+func (e LintError) Error() string // Implements error interface</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>ExecuteOptions</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ExecuteOptions controls the behavior of template execution.</p>
+          <pre><code>type ExecuteOptions struct {
+    DryRun bool // Show what would be done without making changes
+    Skip   bool // Skip files that already exist
+    Force  bool // Overwrite existing files
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>FileEvent</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>FileEvent represents a file operation that occurred during template execution.</p>
+          <pre><code>type FileEvent struct {
+    Path   string // File path affected
+    Action string // Action performed (created, overwritten, skipped)
+}</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>inbound/mcp — scaffor</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">scaffor</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#functions">Functions</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>internal/scaffor/inbound/mcp</code></h1>
+      <p>Import: <code>github.com/JLugagne/scaffor/internal/scaffor/inbound/mcp</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        Package mcp implements the Model Context Protocol (MCP) server for scaffor. This allows scaffor to be exposed as an MCP tool for Claude, Cline, and other AI agents. It also provides session tracking functionality to log tool calls and file events for debugging and auditing.
+      </p>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>ToolCall</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>ToolCall represents a single MCP tool invocation.</p>
+          <pre><code>type ToolCall struct {
+    Timestamp  time.Time          // When the tool was called
+    Tool       string             // Tool name
+    Parameters map[string]any     // Input parameters
+    FileEvents []FileEvent        // Files affected
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>FileEvent</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>FileEvent represents a file operation within an MCP session.</p>
+          <pre><code>type FileEvent struct {
+    Path   string // File path
+    Action string // Action performed (created, overwritten, skipped)
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>Session</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Session tracks all tool calls and file events in an MCP session.</p>
+          <pre><code>type Session struct {
+    path string        // Path to session log file
+    mu   sync.Mutex    // Protects concurrent access
+}</code></pre>
+          <p>Sessions log every tool invocation and the files affected, enabling audit trails and debugging of AI-driven scaffolding operations.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewServer(scaffolder ScaffolderCommands) *sdkmcp.Server</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewServer creates a new MCP server with scaffor tools.</p>
+          <pre><code>func NewServer(scaffolder service.ScaffolderCommands) *sdkmcp.Server</code></pre>
+          <p>Initializes an MCP server that exposes all scaffor operations as MCP tools. Tools include list, get, execute, lint, and test.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>Serve(ctx context.Context, scaffolder ScaffolderCommands) error</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Serve starts the MCP server and listens for requests.</p>
+          <pre><code>func Serve(ctx context.Context, scaffolder service.ScaffolderCommands) error</code></pre>
+          <p>Blocks until the context is cancelled or the server encounters a fatal error.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewSession() (*Session, error)</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewSession creates a new session for logging tool calls.</p>
+          <pre><code>func NewSession() (*Session, error)</code></pre>
+          <p>Creates a session directory in <code>.scaffor/</code> and returns a Session tracker for recording all tool invocations and file events.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*Session) Log(tool string, params map[string]any, events []FileEvent) error</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Log records a tool call and its file events to the session.</p>
+          <pre><code>func (s *Session) Log(tool string, params map[string]any, events []FileEvent) error</code></pre>
+          <p>Appends a timestamped ToolCall entry to the session log. Thread-safe.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>(*Session) Status() (string, error)</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>Status returns a summary of the current session's tool calls and file events.</p>
+          <pre><code>func (s *Session) Status() (string, error)</code></pre>
+          <p>Reads the session log and returns a formatted summary of all operations performed in this session.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>

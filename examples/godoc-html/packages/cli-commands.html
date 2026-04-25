@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>inbound/cli/commands — scaffor</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1><a href="../index.html" style="color:inherit;text-decoration:none">scaffor</a></h1>
+    </div>
+    <div class="sidebar-section">
+      <h3>This Package</h3>
+      <ul>
+        <li><a href="#functions">Functions</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-footer">
+      <button id="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      <a href="../index.html" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.8rem;color:var(--text-muted)">← Back to index</a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1><code>internal/scaffor/inbound/cli/commands</code></h1>
+      <p>Import: <code>github.com/JLugagne/scaffor/internal/scaffor/inbound/cli/commands</code></p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>
+        Package commands implements the Cobra CLI commands for scaffor. It provides the user-facing command-line interface, mapping user inputs to the underlying <code>ScaffolderCommands</code> service interface. Each function returns a <code>*cobra.Command</code> ready to be added to the CLI router.
+      </p>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewListTemplatesCommand(scaffolder ScaffolderCommands) *cobra.Command</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewListTemplatesCommand creates the <code>scaffor list</code> command.</p>
+          <pre><code>func NewListTemplatesCommand(scaffolder service.ScaffolderCommands) *cobra.Command</code></pre>
+          <p>Lists all available templates with their names and descriptions.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewDocCommand(scaffolder ScaffolderCommands) *cobra.Command</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewDocCommand creates the <code>scaffor doc</code> command.</p>
+          <pre><code>func NewDocCommand(scaffolder service.ScaffolderCommands) *cobra.Command</code></pre>
+          <p>Shows documentation for a template or its specific commands. Usage:</p>
+          <ul style="margin-top:0.5rem">
+            <li><code>scaffor doc &lt;template&gt;</code> — Show all commands in a template</li>
+            <li><code>scaffor doc &lt;template&gt; &lt;command&gt;</code> — Show variables for a specific command</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewExecuteCommand(scaffolder ScaffolderCommands) *cobra.Command</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewExecuteCommand creates the <code>scaffor execute</code> command.</p>
+          <pre><code>func NewExecuteCommand(scaffolder service.ScaffolderCommands) *cobra.Command</code></pre>
+          <p>Executes a template command with the given parameters. Usage:</p>
+          <ul style="margin-top:0.5rem">
+            <li><code>scaffor execute &lt;template&gt; &lt;command&gt; --set Key=Value</code></li>
+            <li><code>--dry-run</code> — Preview changes without applying them</li>
+            <li><code>--skip</code> — Skip files that already exist</li>
+            <li><code>--force</code> — Overwrite existing files</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewLintCommand(scaffolder ScaffolderCommands) *cobra.Command</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewLintCommand creates the <code>scaffor lint</code> command.</p>
+          <pre><code>func NewLintCommand(scaffolder service.ScaffolderCommands) *cobra.Command</code></pre>
+          <p>Validates a template manifest for errors. Returns detailed error messages indicating what needs to be fixed.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewTestCommand(scaffolder ScaffolderCommands) *cobra.Command</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewTestCommand creates the <code>scaffor test</code> command.</p>
+          <pre><code>func NewTestCommand(scaffolder service.ScaffolderCommands) *cobra.Command</code></pre>
+          <p>Runs a template's test suite in a temporary directory and validates the output.</p>
+        </div>
+      </div>
+
+      <div class="symbol-section">
+        <div class="symbol-header">
+          <h4>NewMCPCommand(scaffolder ScaffolderCommands) *cobra.Command</h4>
+          <span class="arrow">▶</span>
+        </div>
+        <div class="symbol-body">
+          <p>NewMCPCommand creates the <code>scaffor mcp</code> command.</p>
+          <pre><code>func NewMCPCommand(scaffolder service.ScaffolderCommands) *cobra.Command</code></pre>
+          <p>Starts the Model Context Protocol server, enabling scaffor to be used as an MCP tool for Claude and other AI agents.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../app.js"></script>
+</body>
+</html>
