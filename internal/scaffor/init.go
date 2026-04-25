@@ -16,7 +16,7 @@ import (
 // Runner is a function that executes the CLI logic.
 type Runner func(ctx context.Context, args []string) error
 
-func Setup() Runner {
+func Setup(version string) Runner {
 	return func(ctx context.Context, args []string) error {
 		var (
 			templatesDir         string
@@ -27,7 +27,7 @@ func Setup() Runner {
 		// flags at call time, so PersistentPreRunE can populate them before
 		// any subcommand runs.
 		factory := func() (service.ScaffolderCommands, error) {
-			resolver, err := buildResolver(templatesDir, ignoreMissingSources)
+			resolver, err := buildResolver(templatesDir, "", ignoreMissingSources)
 			if err != nil {
 				return nil, err
 			}
@@ -36,6 +36,15 @@ func Setup() Runner {
 			resolver.WriteCollisionWarnings(os.Stderr)
 			fs := filesystem.NewFileSystem()
 			return appcommands.NewScaffolderHandler(fs, resolver), nil
+		}
+
+		resolverFactory := func() (*config.Resolver, error) {
+			r, err := buildResolver(templatesDir, "", ignoreMissingSources)
+			if err != nil {
+				return nil, err
+			}
+			r.WriteCollisionWarnings(os.Stderr)
+			return r, nil
 		}
 
 		rootCmd := &cobra.Command{
@@ -67,7 +76,16 @@ Use "scaffor <command> --help" for details on any command.`,
 			clicommands.NewDocCommand(factory),
 			clicommands.NewExecuteCommand(factory),
 			clicommands.NewLintCommand(factory),
-			clicommands.NewMCPCommand(factory),
+			clicommands.NewInstallCommand(resolverFactory),
+			clicommands.NewMCPCommand(func(projectDir string) (service.ScaffolderCommands, error) {
+				resolver, err := buildResolver(templatesDir, projectDir, ignoreMissingSources)
+				if err != nil {
+					return nil, err
+				}
+				resolver.WriteCollisionWarnings(os.Stderr)
+				fs := filesystem.NewFileSystem()
+				return appcommands.NewScaffolderHandler(fs, resolver), nil
+			}),
 			clicommands.NewTestCommand(factory),
 			clicommands.NewInitConfigCommand(),
 			clicommands.NewEditConfigCommand(),
@@ -76,12 +94,13 @@ Use "scaffor <command> --help" for details on any command.`,
 				if err != nil {
 					return nil, nil, err
 				}
-				r, err := buildResolver(templatesDir, true)
+				r, err := buildResolver(templatesDir, "", true)
 				if err != nil {
 					return nil, cfg, err
 				}
 				return r, cfg, nil
 			}),
+			clicommands.NewUpgradeCommand(version),
 		)
 
 		rootCmd.SetArgs(args)
@@ -92,7 +111,7 @@ Use "scaffor <command> --help" for details on any command.`,
 // buildResolver produces a resolver from the current CLI flags and global
 // config, applying this precedence: --templates-dir > config sources >
 // .scaffor-templates/ (cwd).
-func buildResolver(templatesDir string, ignoreMissing bool) (*config.Resolver, error) {
+func buildResolver(templatesDir, projectDir string, ignoreMissing bool) (*config.Resolver, error) {
 	if templatesDir != "" {
 		return config.NewResolverForDir(templatesDir), nil
 	}
@@ -101,7 +120,7 @@ func buildResolver(templatesDir string, ignoreMissing bool) (*config.Resolver, e
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if !cfg.Loaded || len(cfg.TemplateSources) == 0 {
-		return config.NewResolverForDir(config.FindLocalTemplatesDir()), nil
+		return config.NewResolverForDir(config.FindLocalTemplatesDirFrom(projectDir)), nil
 	}
 	sources, err := cfg.ResolveSources()
 	if err != nil {
@@ -109,7 +128,7 @@ func buildResolver(templatesDir string, ignoreMissing bool) (*config.Resolver, e
 	}
 	// Prepend the local templates dir (walked up from cwd) so local templates
 	// always shadow global ones with the same name.
-	if localDir := config.FindLocalTemplatesDir(); localDir != "" {
+	if localDir := config.FindLocalTemplatesDirFrom(projectDir); localDir != "" {
 		sources = append([]config.Source{{Path: localDir}}, sources...)
 	}
 	return config.NewResolverFromSources(sources, ignoreMissing)
