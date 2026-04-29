@@ -25,6 +25,8 @@ type executeInput struct {
 	DryRun   bool              `json:"dry_run,omitempty" jsonschema:"when true, shell_commands are printed but not executed; when false (default) they are executed automatically"`
 	Skip     bool              `json:"skip,omitempty" jsonschema:"when true, silently skip files that already exist instead of failing"`
 	Force    bool              `json:"force,omitempty" jsonschema:"when true, overwrite files that already exist instead of failing"`
+	// optional working directory for the execute command; defaults to the MCP client's project root
+	Dir string `json:"dir,omitempty" jsonschema:"optional working directory; defaults to the MCP client project root (cwd)"`
 }
 
 type lintInput struct {
@@ -43,6 +45,8 @@ type batchExecuteInput struct {
 	Steps    []batchItem `json:"steps" jsonschema:"ordered list of {command, params} pairs to execute sequentially"`
 	Skip     bool        `json:"skip,omitempty" jsonschema:"when true, silently skip files that already exist instead of failing"`
 	Force    bool        `json:"force,omitempty" jsonschema:"when true, overwrite files that already exist instead of failing"`
+	// optional working directory for all steps; defaults to the MCP client's project root
+	Dir string `json:"dir,omitempty" jsonschema:"optional working directory for all steps; defaults to the MCP client project root (cwd)"`
 }
 
 // NewServer creates an MCP server exposing scaffor's scaffolding tools.
@@ -291,10 +295,13 @@ force=true to overwrite them.
 After files are written, shell_commands defined in the manifest are executed automatically.
 Set dry_run=true to print them without executing.
 
+dir overrides the working directory for file output and shell_commands. Defaults to the
+MCP client's project root (cwd).
+
 The output reports all file events (created, overwritten, skipped), shell command results,
 optional per-command hints, and shell commands.`,
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args executeInput) (*sdkmcp.CallToolResult, any, error) {
-		s, err := resolveScaffolder(ctx, req, factory)
+		s, err := resolveScaffolderWithDir(ctx, req, factory, args.Dir)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
@@ -357,9 +364,12 @@ and returns the error along with output accumulated so far.
 
 skip and force apply to every step (same semantics as in execute).
 
+dir overrides the working directory for all steps. Defaults to the MCP client's project
+root (cwd).
+
 The output reports each step's file events, hints, and shell command results in sequence.`,
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, args batchExecuteInput) (*sdkmcp.CallToolResult, any, error) {
-		s, err := resolveScaffolder(ctx, req, factory)
+		s, err := resolveScaffolderWithDir(ctx, req, factory, args.Dir)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
@@ -659,4 +669,11 @@ func resolveScaffolder(ctx context.Context, req *sdkmcp.CallToolRequest, factory
 		}
 	}
 	return factory(projectDir)
+}
+
+func resolveScaffolderWithDir(ctx context.Context, req *sdkmcp.CallToolRequest, factory ScaffolderFactory, dir string) (service.ScaffolderCommands, error) {
+	if dir != "" {
+		return factory(dir)
+	}
+	return resolveScaffolder(ctx, req, factory)
 }
