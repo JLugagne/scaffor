@@ -2,6 +2,7 @@ package commands_test
 
 import (
 	"context"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -214,7 +215,7 @@ commands:
         destination: out/file.go
 `),
 			".scaffor-templates/badparts/_partials/broken.tmpl": []byte(`{{ define "x" }}{{ .Foo`), // unclosed action
-			".scaffor-templates/badparts/file.go.tmpl":         []byte(`package main`),
+			".scaffor-templates/badparts/file.go.tmpl":          []byte(`package main`),
 		}}
 		handler := newHandler(fs)
 		_, err := handler.Execute(ctx, "badparts", "gen", map[string]string{}, domain.ExecuteOptions{})
@@ -1315,5 +1316,427 @@ shell_commands:
 			}
 		}
 		assert.False(t, found, "empty pattern should be allowed, got: %v", errs)
+	})
+}
+
+// captureInjectionStdout runs fn while redirecting os.Stdout to a pipe and
+// returns everything written to it. Used to observe dry-run shell command
+// output for injection tests.
+func captureInjectionStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+
+	require.NoError(t, w.Close())
+	data, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(data)
+}
+
+// TestScaffolder_Injection_AfterAndBefore covers the two insertion positions
+// against an existing target file.
+func TestScaffolder_Injection_AfterAndBefore(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("after (default) inserts below the anchor line", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    variables:
+      - key: Name
+        description: name
+    injections:
+      - target: registry.go
+        anchor: "// register here"
+        content: "	register(\"{{ .Name }}\")"
+`),
+			"registry.go": []byte("package r\n// register here\nfunc init() {}\n"),
+		}}
+		handler := newHandler(fs)
+		events, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{"Name": "cat"}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+
+		got := string(fs.files["registry.go"])
+		want := "package r\n// register here\n	register(\"cat\")\nfunc init() {}\n"
+		assert.Equal(t, want, got)
+
+		require.Len(t, events, 1)
+		assert.Equal(t, "injected", events[0].Action)
+		assert.Equal(t, "registry.go", events[0].Path)
+	})
+
+	t.Run("before inserts above the anchor line", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    variables:
+      - key: Name
+        description: name
+    injections:
+      - target: registry.go
+        anchor: "// register here"
+        position: before
+        content: "before-line-{{ .Name }}"
+`),
+			"registry.go": []byte("package r\n// register here\nfunc init() {}\n"),
+		}}
+		handler := newHandler(fs)
+		_, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{"Name": "cat"}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+
+		got := string(fs.files["registry.go"])
+		want := "package r\nbefore-line-cat\n// register here\nfunc init() {}\n"
+		assert.Equal(t, want, got)
+	})
+}
+
+// TestScaffolder_Injection_Guards covers the idempotency guards: an explicit
+// skip_if match and the default content-based guard.
+func TestScaffolder_Injection_Guards(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("skip_if guard causes injection-skipped on second run", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    variables:
+      - key: Name
+        description: name
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        skip_if: "register(\"{{ .Name }}\")"
+        content: "	register(\"{{ .Name }}\") // trailing comment differs"
+`),
+			"registry.go": []byte("package r\n// anchor\n"),
+		}}
+		handler := newHandler(fs)
+
+		events1, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{"Name": "cat"}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		require.Len(t, events1, 1)
+		assert.Equal(t, "injected", events1[0].Action)
+
+		events2, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{"Name": "cat"}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		require.Len(t, events2, 1)
+		assert.Equal(t, "injection-skipped", events2[0].Action)
+	})
+
+	t.Run("default content guard skips when content already present", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        content: "the-injected-line"
+`),
+			"registry.go": []byte("package r\n// anchor\n"),
+		}}
+		handler := newHandler(fs)
+
+		events1, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "injected", events1[0].Action)
+
+		events2, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "injection-skipped", events2[0].Action)
+	})
+}
+
+// TestScaffolder_Injection_MissingTarget covers behaviour when the target file
+// does not exist: default failure and on_missing=skip recording a skipped event.
+func TestScaffolder_Injection_MissingTarget(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("missing target errors by default", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: missing.go
+        anchor: "// anchor"
+        content: "x"
+`),
+		}}
+		handler := newHandler(fs)
+		// Force so the pre-flight check does not run (it would also fail); this
+		// isolates the runtime missing-target branch.
+		_, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{Force: true})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "injection target missing.go does not exist")
+	})
+
+	t.Run("on_missing skip records injection-skipped", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: missing.go
+        anchor: "// anchor"
+        on_missing: skip
+        content: "x"
+`),
+		}}
+		handler := newHandler(fs)
+		events, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+		assert.Equal(t, "injection-skipped", events[0].Action)
+		assert.Equal(t, "missing.go", events[0].Path)
+	})
+}
+
+// TestScaffolder_Injection_AnchorNotFound covers the anchor-not-found branch
+// for both the default failure and on_missing=skip.
+func TestScaffolder_Injection_AnchorNotFound(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("anchor not found errors by default", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: "// nope"
+        content: "x"
+`),
+			"registry.go": []byte("package r\n// anchor\n"),
+		}}
+		handler := newHandler(fs)
+		_, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "anchor \"// nope\" not found in registry.go")
+	})
+
+	t.Run("anchor not found with on_missing skip records injection-skipped", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: "// nope"
+        on_missing: skip
+        content: "x"
+`),
+			"registry.go": []byte("package r\n// anchor\n"),
+		}}
+		handler := newHandler(fs)
+		events, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+		assert.Equal(t, "injection-skipped", events[0].Action)
+	})
+}
+
+// TestScaffolder_Injection_ShellCommandFiles verifies that an injected target
+// is added to createdFiles (deduplicated) so template-level shell_commands
+// match it via {{ .Files }}. Dry-run is used to observe the rendered command.
+func TestScaffolder_Injection_ShellCommandFiles(t *testing.T) {
+	ctx := context.Background()
+
+	fs := &mockFS{files: map[string][]byte{
+		".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: wire_gen.go
+        anchor: "// anchor"
+        content: "injected"
+shell_commands:
+  - command: "goimports -w {{ .Files }}"
+    pattern: "*.go"
+`),
+		"wire_gen.go": []byte("package r\n// anchor\n"),
+	}}
+	handler := newHandler(fs)
+
+	out := captureInjectionStdout(t, func() {
+		_, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{DryRun: true})
+		require.NoError(t, err)
+	})
+	assert.Contains(t, out, "goimports -w wire_gen.go")
+}
+
+// TestScaffolder_Injection_DirJoin verifies ExecuteOptions.Dir is joined onto
+// a relative injection target at execution time. Force bypasses the pre-flight
+// check (which intentionally does not apply the Dir join) so this isolates the
+// runtime Dir-join behaviour.
+func TestScaffolder_Injection_DirJoin(t *testing.T) {
+	ctx := context.Background()
+
+	fs := &mockFS{files: map[string][]byte{
+		".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        content: "injected"
+`),
+		"proj/registry.go": []byte("package r\n// anchor\n"),
+	}}
+	handler := newHandler(fs)
+
+	events, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{Dir: "proj", Force: true})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "proj/registry.go", events[0].Path)
+	assert.Contains(t, string(fs.files["proj/registry.go"]), "injected")
+}
+
+// TestScaffolder_Injection_DryRunApplies verifies that injections are applied
+// even under dry-run (dry-run only suppresses shell command execution).
+func TestScaffolder_Injection_DryRunApplies(t *testing.T) {
+	ctx := context.Background()
+
+	fs := &mockFS{files: map[string][]byte{
+		".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        content: "dry-injected"
+`),
+		"registry.go": []byte("package r\n// anchor\n"),
+	}}
+	handler := newHandler(fs)
+
+	_ = captureInjectionStdout(t, func() {
+		_, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{DryRun: true})
+		require.NoError(t, err)
+	})
+	assert.Contains(t, string(fs.files["registry.go"]), "dry-injected")
+}
+
+// TestScaffolder_Injection_PreFlight verifies the two-pass pre-flight check:
+// it fails when an injection target is missing and not created by the chain,
+// and succeeds when the target is created by the same command chain.
+func TestScaffolder_Injection_PreFlight(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("fails when target missing and not created by chain", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: absent.go
+        anchor: "// anchor"
+        content: "x"
+`),
+		}}
+		handler := newHandler(fs)
+		_, err := handler.Execute(ctx, "tmpl", "wire", map[string]string{}, domain.ExecuteOptions{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "pre-flight check failed")
+		assert.Contains(t, err.Error(), "absent.go")
+	})
+
+	t.Run("succeeds when target created by the same command chain", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: create
+    files:
+      - source: registry.go.tmpl
+        destination: registry.go
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        content: "injected"
+`),
+			".scaffor-templates/tmpl/registry.go.tmpl": []byte("package r\n// anchor\n"),
+		}}
+		handler := newHandler(fs)
+		events, err := handler.Execute(ctx, "tmpl", "create", map[string]string{}, domain.ExecuteOptions{})
+		require.NoError(t, err)
+		require.Len(t, events, 2)
+		assert.Equal(t, "created", events[0].Action)
+		assert.Equal(t, "injected", events[1].Action)
+		assert.Contains(t, string(fs.files["registry.go"]), "injected")
+	})
+}
+
+// TestScaffolder_Lint_Injection covers lint checks for injections: an
+// undeclared variable in content, an empty anchor, and an invalid position.
+func TestScaffolder_Lint_Injection(t *testing.T) {
+	ctx := context.Background()
+
+	hasErr := func(errs []domain.LintError, field, substr string) bool {
+		for _, e := range errs {
+			if e.Field == field && strings.Contains(e.Message, substr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("undeclared variable in injection content", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    variables:
+      - key: Name
+        description: name
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        content: "register({{ .Missing }})"
+`),
+		}}
+		handler := newHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		assert.True(t, hasErr(errs, "injections.content", "not declared"), "expected undeclared-variable error, got: %v", errs)
+	})
+
+	t.Run("empty anchor", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: ""
+        content: "x"
+`),
+		}}
+		handler := newHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		assert.True(t, hasErr(errs, "injections.anchor", "empty"), "expected empty-anchor error, got: %v", errs)
+	})
+
+	t.Run("invalid position value", func(t *testing.T) {
+		fs := &mockFS{files: map[string][]byte{
+			".scaffor-templates/tmpl/manifest.yaml": []byte(`name: tmpl
+commands:
+  - command: wire
+    injections:
+      - target: registry.go
+        anchor: "// anchor"
+        position: sideways
+        content: "x"
+`),
+		}}
+		handler := newHandler(fs)
+		errs := handler.Lint(ctx, "tmpl", "")
+		assert.True(t, hasErr(errs, "injections.position", "invalid"), "expected invalid-position error, got: %v", errs)
 	})
 }

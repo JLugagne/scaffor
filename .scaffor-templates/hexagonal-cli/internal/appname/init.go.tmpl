@@ -30,6 +30,7 @@ func Setup() Runner {
 
 		rootCmd.AddCommand(
 			clicommands.NewRootCommand(handler),
+			// scaffor:commands
 		)
 
 		rootCmd.SetArgs(args)

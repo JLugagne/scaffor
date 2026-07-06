@@ -338,6 +338,11 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 			createdFiles = append(createdFiles, targetPath)
 		}
 
+		// Process injections in declared order, after files and before hints.
+		if err := h.applyInjections(ctx, cmd, cmdName, params, funcMap, partials, opts, &fileEvents, &createdFiles); err != nil {
+			return err
+		}
+
 		if cmd.Hint != "" {
 			hintTmpl, err := template.New("hint").Funcs(funcMap).Parse(cmd.Hint)
 			if err == nil {
@@ -509,14 +514,24 @@ func (h *ScaffolderHandler) Execute(ctx context.Context, templateName, commandNa
 }
 
 func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, commandName string, cmdMap map[string]domain.TemplateCommand, params map[string]string) error {
-	visited := make(map[string]bool)
 	funcMap := getFuncMap()
 
-	walk := func(cmdName string) error {
+	// planned collects every Files destination that will be created by the
+	// visited command chain, so the injection pass can treat a file that is
+	// created earlier in the same chain as "present".
+	planned := make(map[string]bool)
+
+	// First pass: walk the command chain, run the existing exists-check on each
+	// Files destination and record it in planned.
+	visited := make(map[string]bool)
+	var order []string
+	var walk func(cmdName string) error
+	walk = func(cmdName string) error {
 		if visited[cmdName] {
 			return nil
 		}
 		visited[cmdName] = true
+		order = append(order, cmdName)
 		cmd := cmdMap[cmdName]
 
 		for _, fileTmpl := range cmd.Files {
@@ -534,6 +549,8 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 				return err
 			}
 
+			planned[targetPath] = true
+
 			// Files with on_conflict skip or force don't need a pre-flight check.
 			if fileTmpl.OnConflict == "skip" || fileTmpl.OnConflict == "force" {
 				continue
@@ -547,10 +564,53 @@ func (h *ScaffolderHandler) preFlightCheck(ctx context.Context, templateName, co
 			}
 		}
 
+		for _, postCmd := range cmd.PostCommands {
+			if err := walk(postCmd); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
-	return walk(commandName)
+	if err := walk(commandName); err != nil {
+		return err
+	}
+
+	// Second pass: injection targets with on_missing != "skip" must either exist
+	// on disk or be created by the same command chain (planned set).
+	for _, cmdName := range order {
+		cmd := cmdMap[cmdName]
+		for _, inj := range cmd.Injections {
+			if inj.OnMissing == "skip" {
+				continue
+			}
+			targetTmpl, err := template.New("injection-target").Funcs(funcMap).Parse(inj.Target)
+			if err != nil {
+				return err
+			}
+			var targetBuf bytes.Buffer
+			if err := targetTmpl.Execute(&targetBuf, params); err != nil {
+				return err
+			}
+			target := targetBuf.String()
+
+			if err := safeDestination(target); err != nil {
+				return err
+			}
+
+			if planned[target] {
+				continue
+			}
+			if _, err := h.fs.ReadFile(ctx, target); err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("pre-flight check failed: injection target %s does not exist and is not created by command %s", target, cmdName)
+				}
+				return fmt.Errorf("pre-flight check failed on %s: %w", target, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templateDir string) []domain.LintError {
@@ -710,6 +770,91 @@ func (h *ScaffolderHandler) Lint(ctx context.Context, templateName string, templ
 			for v := range used {
 				if !declared[v] {
 					errs = append(errs, undeclaredErr(v, "files.source:"+f.Source))
+				}
+			}
+		}
+
+		// Validate injections: template syntax + declared variables for target,
+		// anchor, content, and skip_if; required-field and enum checks.
+		for _, inj := range cmd.Injections {
+			if strings.TrimSpace(inj.Target) == "" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "injections.target",
+					Message: "injection target is empty",
+				})
+			}
+			if strings.TrimSpace(inj.Anchor) == "" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "injections.anchor",
+					Message: "injection anchor is empty",
+				})
+			}
+			if strings.TrimSpace(inj.Content) == "" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "injections.content",
+					Message: "injection content is empty",
+				})
+			}
+			if inj.Position != "" && inj.Position != "after" && inj.Position != "before" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "injections.position",
+					Message: fmt.Sprintf("position %q is invalid (must be \"\", \"after\", or \"before\")", inj.Position),
+				})
+			}
+			if inj.OnMissing != "" && inj.OnMissing != "fail" && inj.OnMissing != "skip" {
+				errs = append(errs, domain.LintError{
+					Command: cmd.Command,
+					Field:   "injections.on_missing",
+					Message: fmt.Sprintf("on_missing %q is invalid (must be \"\", \"fail\", or \"skip\")", inj.OnMissing),
+				})
+			}
+
+			// target, anchor, and skip_if are plain templates.
+			for _, pf := range []struct {
+				field string
+				text  string
+			}{
+				{"injections.target", inj.Target},
+				{"injections.anchor", inj.Anchor},
+				{"injections.skip_if", inj.SkipIf},
+			} {
+				if pf.text == "" {
+					continue
+				}
+				if _, err := template.New("").Funcs(getFuncMap()).Parse(pf.text); err != nil {
+					errs = append(errs, domain.LintError{
+						Command: cmd.Command,
+						Field:   pf.field,
+						Message: fmt.Sprintf("invalid template syntax: %v", err),
+					})
+					continue
+				}
+				for v := range extractTemplateVars(pf.text) {
+					if !declared[v] {
+						errs = append(errs, undeclaredErr(v, pf.field))
+					}
+				}
+			}
+
+			// content is parsed with the partials-aware path so
+			// {{ template "_partials/..." }} calls resolve.
+			if inj.Content != "" {
+				if _, err := parseWithPartials(partials, "", inj.Content); err != nil {
+					errs = append(errs, domain.LintError{
+						Command: cmd.Command,
+						Field:   "injections.content",
+						Message: fmt.Sprintf("invalid template syntax: %v", err),
+					})
+				} else {
+					for v := range extractTemplateVars(inj.Content) {
+						if !declared[v] {
+							errs = append(errs, undeclaredErr(v, "injections.content"))
+						}
+					}
 				}
 			}
 		}
@@ -1109,5 +1254,156 @@ func copyDir(src, dst string) error {
 			}
 		}
 	}
+	return nil
+}
+
+// applyInjections processes a command's injections in declared order,
+// modifying existing files at anchor points. It mirrors the file loop's
+// path handling (funcMap + params, opts.Dir join, safeDestination) and
+// renders Content through the partials-aware path so snippets may use
+// {{ template "_partials/..." }}. Injections apply even under opts.DryRun,
+// which only suppresses shell command execution. Injected targets are
+// appended to createdFiles (deduplicated) so shell_commands pick up the
+// modified file.
+func (h *ScaffolderHandler) applyInjections(
+	ctx context.Context,
+	cmd domain.TemplateCommand,
+	cmdName string,
+	params map[string]string,
+	funcMap template.FuncMap,
+	partials *template.Template,
+	opts domain.ExecuteOptions,
+	fileEvents *[]domain.FileEvent,
+	createdFiles *[]string,
+) error {
+	renderPlain := func(what, text string) (string, error) {
+		t, err := template.New(what).Funcs(funcMap).Parse(text)
+		if err != nil {
+			return "", err
+		}
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, params); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+
+	for _, inj := range cmd.Injections {
+		// Validate enum fields up front for a clear error.
+		switch inj.Position {
+		case "", "after", "before":
+		default:
+			return fmt.Errorf("invalid injection position %q (must be \"\", \"after\", or \"before\") for command %s", inj.Position, cmdName)
+		}
+		switch inj.OnMissing {
+		case "", "fail", "skip":
+		default:
+			return fmt.Errorf("invalid injection on_missing %q (must be \"\", \"fail\", or \"skip\") for command %s", inj.OnMissing, cmdName)
+		}
+
+		// Resolve target path exactly like a file destination.
+		target, err := renderPlain("injection-target", inj.Target)
+		if err != nil {
+			return err
+		}
+		if opts.Dir != "" && !filepath.IsAbs(target) {
+			target = filepath.Join(opts.Dir, target)
+		}
+		if err := safeDestination(target); err != nil {
+			return err
+		}
+
+		anchor, err := renderPlain("injection-anchor", inj.Anchor)
+		if err != nil {
+			return err
+		}
+		skipIf, err := renderPlain("injection-skip-if", inj.SkipIf)
+		if err != nil {
+			return err
+		}
+
+		// Content is rendered through the partials-aware path.
+		contentTmpl, err := parseWithPartials(partials, "injection-content", inj.Content)
+		if err != nil {
+			return err
+		}
+		var contentBuf bytes.Buffer
+		if err := contentTmpl.Execute(&contentBuf, params); err != nil {
+			return err
+		}
+		content := contentBuf.String()
+
+		data, readErr := h.fs.ReadFile(ctx, target)
+		if readErr != nil {
+			if inj.OnMissing == "skip" {
+				*fileEvents = append(*fileEvents, domain.FileEvent{Path: target, Action: "injection-skipped"})
+				continue
+			}
+			return fmt.Errorf("injection target %s does not exist (command %s)", target, cmdName)
+		}
+		fileContent := string(data)
+
+		// Idempotency guard: prefer skip_if when set, else the trimmed content.
+		guard := skipIf
+		if guard == "" {
+			guard = strings.TrimRight(content, "\n")
+		}
+		if guard != "" && strings.Contains(fileContent, guard) {
+			*fileEvents = append(*fileEvents, domain.FileEvent{Path: target, Action: "injection-skipped"})
+			continue
+		}
+
+		// Find the first line containing the anchor.
+		lines := strings.Split(fileContent, "\n")
+		anchorIdx := -1
+		for i, line := range lines {
+			if strings.Contains(line, anchor) {
+				anchorIdx = i
+				break
+			}
+		}
+		if anchorIdx == -1 {
+			if inj.OnMissing == "skip" {
+				*fileEvents = append(*fileEvents, domain.FileEvent{Path: target, Action: "injection-skipped"})
+				continue
+			}
+			return fmt.Errorf("anchor %q not found in %s", anchor, target)
+		}
+
+		// Ensure the content ends with exactly one newline, then split into
+		// whole lines to insert relative to the anchor.
+		normalized := strings.TrimRight(content, "\n") + "\n"
+		insertLines := strings.Split(strings.TrimSuffix(normalized, "\n"), "\n")
+
+		insertAt := anchorIdx + 1 // "after" (default)
+		if inj.Position == "before" {
+			insertAt = anchorIdx
+		}
+
+		newLines := make([]string, 0, len(lines)+len(insertLines))
+		newLines = append(newLines, lines[:insertAt]...)
+		newLines = append(newLines, insertLines...)
+		newLines = append(newLines, lines[insertAt:]...)
+		newContent := strings.Join(newLines, "\n")
+
+		if err := h.fs.WriteFile(ctx, target, []byte(newContent)); err != nil {
+			return err
+		}
+		*fileEvents = append(*fileEvents, domain.FileEvent{Path: target, Action: "injected"})
+
+		// Deduplicate before adding so shell_commands (e.g. goimports) see the
+		// modified file exactly once.
+		alreadyTracked := false
+		for _, f := range *createdFiles {
+			if f == target {
+				alreadyTracked = true
+				break
+			}
+		}
+		if !alreadyTracked {
+			*createdFiles = append(*createdFiles, target)
+		}
+	}
+
 	return nil
 }

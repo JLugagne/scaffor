@@ -145,6 +145,55 @@ mytemplate/
   manifest.yaml
 ```
 
+### Wiring into existing files: `injections`
+
+New files aren't the whole story — a new entity often needs to be *registered* somewhere: a handler added to a router, a command added to a CLI's root command, an entry added to a switch statement. `injections` let a command make a precise, deterministic edit to a file that already exists, instead of leaving that step for the user (or the agent) to do by hand.
+
+**When to use injections:**
+- Wiring a newly-generated file into a bootstrap-generated file (registering a handler, a route, a command).
+- Appending to a registration list that already exists in the target project (a slice literal, a switch, an init list).
+
+Don't use injections for anything that isn't a small, mechanical, line-based insertion — if the edit requires restructuring surrounding code, it doesn't belong in a template.
+
+**The anchor convention:** put a stable marker comment in the file your `bootstrap` command generates, at the exact spot incremental commands should inject into:
+
+```go
+func init() {
+    rootCmd.AddCommand(
+        // scaffor:commands
+    )
+}
+```
+
+Then an incremental command injects before that anchor:
+
+```yaml
+injections:
+  - target: internal/{{ .AppName }}/init.go
+    anchor: "// scaffor:commands"
+    position: before
+    content: "    clicommands.New{{ .Command | title }}Command(handler),"
+    skip_if: "New{{ .Command | title }}Command(handler)"
+```
+
+**Always set `skip_if` to a unique, whitespace-insensitive substring of the content you're injecting** — don't rely on the default guard (which checks for the *rendered content verbatim*). A template-level `gofmt`/`goimports` `shell_commands` step may re-indent injected lines on the next run, and a verbatim-content guard will then fail to match, causing the line to be injected a second time. Picking a substring like `New{{ .Command | title }}Command(handler)` survives reformatting because it doesn't depend on leading whitespace.
+
+**`on_missing: skip`** is the right choice for injections into a file that may not exist in every project generated from this template (an optional file from another command) — it lets execution continue instead of failing when the target isn't there.
+
+**Testing injections:** exercise the injecting command from your `test:` block after the command that creates its target, then assert with `validate:` that the injected line is present and the result still compiles:
+
+```yaml
+test:
+  - command: bootstrap
+    params: { AppName: testapp, ModulePath: github.com/test/testapp }
+  - command: add_command
+    params: { AppName: testapp, ModulePath: github.com/test/testapp, Command: sync }
+
+validate:
+  - "grep -q 'NewSyncCommand' internal/testapp/init.go"
+  - "go build ./..."
+```
+
 ## Step 4: Write the manifest.yaml
 
 ### Full Schema
@@ -165,6 +214,13 @@ commands:
       - source: path/to/file.tmpl           # Relative to template dir; omit for empty file
         destination: path/to/{{ .Var }}/out  # Output path, supports template syntax
         on_conflict: default                 # "default", "skip", or "force" (optional)
+    injections:                  # Optional, edits to a file that already exists
+      - target: internal/{{ .AppName }}/init.go   # Required, rendered as a template
+        anchor: "// scaffor:commands"              # Required — insert at the first matching line
+        position: after                            # Optional — "after" (default) or "before"
+        content: "    clicommands.New{{ .Command | title }}Command(handler),"  # Required
+        skip_if: "New{{ .Command | title }}Command(handler)"  # Optional idempotency guard
+        on_missing: fail                           # Optional — "fail" (default) or "skip"
     post_commands:
       - other_command_name       # Chain to another command in this template
     shell_commands:              # Optional, per-command shell commands (same format as template-level)
@@ -216,6 +272,14 @@ validate:                        # Optional, shell commands run in the temp dir 
   - Use `default` (or omit) when neither rule applies and the user should decide at execution time.
 
 **`variables`** — Declared per-command. Each variable used in destinations, sources, or hints must be declared here.
+
+**`injections`** — Edits an existing file after this command's `files` are written; see [Wiring into existing files: `injections`](#wiring-into-existing-files-injections) above for the full guide. Each entry:
+- `target` (required): path to the existing file to modify. Rendered as a template.
+- `anchor` (required): rendered string; the injection is inserted at the first line of `target` containing it.
+- `position` (optional): `after` (default) or `before` the anchor line.
+- `content` (required): rendered string, inserted verbatim as full lines — indentation is your responsibility.
+- `skip_if` (optional): rendered substring; if `target` already contains it, the injection is skipped. Defaults to checking for `content` verbatim if omitted.
+- `on_missing` (optional): `fail` (default) or `skip` when `target` doesn't exist or `anchor` isn't found.
 
 **`post_commands`** — List of other command names in the same template to execute after this one. Executed depth-first. No cycles allowed.
 
@@ -392,6 +456,7 @@ Verify:
 - **Forgetting to declare a variable** — every `{{ .Something }}` in a destination path, `.tmpl` file, or hint must have a matching entry in `variables`. The linter catches this.
 - **Lowercase variable keys** — `{{ .entity }}` won't work. Use `{{ .Entity }}` and pipe to `lower` when needed.
 - **Over-templating** — don't replace constants with variables. If every entity lives under `internal/`, leave `internal/` hardcoded.
-- **Path traversal** — destinations containing `..` are rejected. All paths must be relative and downward.
+- **Path traversal** — destinations containing `..` are rejected. All paths must be relative and downward. The same rule applies to `injections.target`.
 - **Existing files** — execution aborts if any destination file already exists (pre-flight check). Use `--skip` to skip, `--force` to overwrite, or set `on_conflict` per file in the manifest to control behaviour at the template level.
+- **Content-based `skip_if` breaking after reformatting** — if you omit `skip_if` on an injection, the default guard checks for `content` verbatim; a `gofmt`/`goimports` shell command can re-indent injected lines on a later run and make that check miss, causing a duplicate injection. Always set an explicit, whitespace-insensitive `skip_if`.
 - **Skipping the linter** — always run `scaffor lint <template-name>` after writing or modifying a template. It catches syntax errors, undeclared variables, invalid patterns, and typos before execution.

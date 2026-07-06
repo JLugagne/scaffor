@@ -41,7 +41,7 @@ commands:
 
       Structure:
         cmd/{{ .AppName }}/main.go                                          — entrypoint
-        internal/{{ .AppName }}/init.go                                     — wiring
+        internal/{{ .AppName }}/init.go                                     — wiring (contains the `// scaffor:commands` anchor used by add_command)
         internal/{{ .AppName }}/domain/                                     — entities & repository interfaces
         internal/{{ .AppName }}/domain/service/                             — domain service interfaces
         internal/{{ .AppName }}/app/commands/                               — application layer (use cases)
@@ -149,19 +149,24 @@ commands:
     files:
       - source: internal/appname/inbound/cli/commands/command/command.go.tmpl
         destination: internal/{{ .AppName }}/inbound/cli/commands/{{ .Command | lower }}.go
+    injections:
+      - target: internal/{{ .AppName }}/init.go
+        anchor: "// scaffor:commands"
+        position: before
+        content: "            clicommands.New{{ .Command | title }}Command(handler),"
+        skip_if: "New{{ .Command | title }}Command(handler)"
     hint: |
       CLI command "{{ .Command | lower }}" added.
 
       Created:
         internal/{{ .AppName }}/inbound/cli/commands/{{ .Command | lower }}.go
 
+      The command was automatically registered in internal/{{ .AppName }}/init.go
+      (look for the "[injected]" event and the `// scaffor:commands` anchor).
+
       NEXT STEPS:
         1. Add flags and arguments to the command in {{ .Command | lower }}.go
         2. Implement the command logic (call use cases via the service interface)
-        3. Register the command in internal/{{ .AppName }}/init.go:
-             rootCmd.AddCommand(
-                 clicommands.New{{ .Command | title }}Command(handler),
-             )
 
 shell_commands:
   - command: "goimports -w {{ .Files }}"
@@ -200,5 +205,6 @@ test:
       Command: sync
 
 validate:
+  - "grep -q \"NewSyncCommand\" internal/testapp/init.go"
   - "go mod tidy"
   - "go build ./..."

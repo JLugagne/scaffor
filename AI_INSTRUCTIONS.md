@@ -50,6 +50,8 @@ scaffor execute hexagonal bootstrap \
 
 After files are written, post_commands are printed for review. Pass `--run-commands` to execute them automatically via the shell.
 
+Some commands also declare `injections` — deterministic edits to a file that already exists (e.g. registering a new handler in `init.go`), applied automatically as part of `execute`. Watch for `injected` / `injection-skipped` events in the output: if a template injects the wiring for you, don't also hand-edit that file yourself.
+
 ## 4. Following Hints — THIS IS CRITICAL
 
 After every scaffold execution, hints are printed to the console. **You MUST read these hints carefully and execute the next steps they suggest.**

@@ -82,6 +82,9 @@ Workflow:
 When you need to call the same command repeatedly (e.g. add_migration × N), always use
 batch_execute with all N steps in one call instead of N separate execute calls.
 
+Templates may also declare injections, which modify existing files by inserting content at
+anchor points; these are reported as "injected" file events.
+
 Status: every tool call is logged to a .scaffor/<session-id>.jsonl file for the duration of
 this MCP session. Call status at any time to review what has been done so far, including
 which files were created, overwritten, or skipped during execute calls.`,
@@ -187,6 +190,20 @@ func writeCommandDetail(sb *strings.Builder, cmd domain.TemplateCommand) {
 		sb.WriteString("\n  Post-commands:\n")
 		for _, pc := range cmd.PostCommands {
 			fmt.Fprintf(sb, "    → %s\n", pc)
+		}
+	}
+	if len(cmd.Injections) > 0 {
+		sb.WriteString("\n  Injections:\n")
+		for _, inj := range cmd.Injections {
+			pos := inj.Position
+			if pos == "" {
+				pos = "after"
+			}
+			fmt.Fprintf(sb, "    %s (%s anchor: %s)", inj.Target, pos, inj.Anchor)
+			if inj.OnMissing != "" {
+				fmt.Fprintf(sb, " [on_missing: %s]", inj.OnMissing)
+			}
+			sb.WriteString("\n")
 		}
 	}
 	if len(cmd.ShellCommands) > 0 {

@@ -68,6 +68,7 @@ Output for a specific command lists:
 - Required variables (as `--set Key=Value`)
 - `post_commands` that will chain to other template commands
 - `shell_commands` scoped to this command (with their mode)
+- `injections` declared on this command (target and anchor)
 
 ---
 
@@ -88,7 +89,8 @@ scaffor execute <template> <command> [--set Key=Value ...] [flags]
 **Behavior:**
 - If any required variable is missing, execution aborts and prints the full `--set` usage line.
 - Pre-flight check: by default, execution aborts if any destination file already exists. Use `--skip`, `--force`, or per-file `on_conflict` in the manifest.
-- After files are written, `shell_commands` run automatically (unless `--dry-run`).
+- After files are written, `injections` are applied (see [Injections](#injections)), reporting `injected` or `injection-skipped` events.
+- After injections, `shell_commands` run automatically (unless `--dry-run`).
 - A rendered `hint:` is printed after a successful run to guide the next step.
 
 **Conflict resolution (`on_conflict` per file):**
@@ -117,6 +119,34 @@ scaffor execute service create --set Name=catalog --force
 
 ---
 
+## Injections
+
+A command's `injections:` block edits an existing file instead of creating a new one — used for wiring a new file into code that already exists (e.g. registering a handler in `init.go`). Injections run after the command's files are written and before the hint, in declared order, and they run for every command in a `post_commands` chain.
+
+**How insertion works:**
+- `target`, `anchor`, `content`, and `skip_if` are all rendered with the command's variables (and Sprig functions), the same as `files`. `content` may reference `_partials/` snippets.
+- `anchor` matches the **first** line in `target` that contains the rendered string.
+- `position: after` (default) inserts `content` on the line following the anchor; `position: before` inserts it on the line preceding the anchor.
+- Insertion is **line-based and verbatim** — indentation is the template author's responsibility. A trailing newline is ensured. If the target is a Go file, a template-level `goimports`/`gofmt` `shell_commands` entry normalizes it afterward; injected files participate in `shell_commands` pattern matching and `{{ .Files }}` / `{{ .File }}` like any other written file.
+
+**Idempotency:**
+- `skip_if` (optional) is a rendered substring; if `target` already contains it, the injection is skipped instead of duplicating lines.
+- If `skip_if` is omitted, the injection is skipped when `target` already contains the rendered `content` verbatim.
+
+**Missing target or anchor:**
+- `on_missing: fail` (default) — execution fails if `target` doesn't exist or `anchor` isn't found in it.
+- `on_missing: skip` — silently skip the injection instead of failing.
+
+**Dry-run:** `--dry-run` still applies injections exactly like file rendering — only `shell_commands` are printed instead of executed.
+
+**Pre-flight:** when neither `--skip` nor `--force` is set, execution aborts before writing anything if an injection's `target` neither exists on disk nor is created by the same run (unless `on_missing: skip`).
+
+**Directory traversal** (`..`) in `target` is rejected, same as `files.destination`.
+
+**Events:** injections report `injected` or `injection-skipped` file events, alongside `created`/`overwritten`/`skipped`, in CLI output, MCP structured content, and the `.scaffor/<session-id>.jsonl` session log.
+
+---
+
 ## `lint`
 
 Statically validate a template manifest and report all issues found. Runs in milliseconds — put it in CI.
@@ -140,6 +170,10 @@ scaffor lint -d <dir> <template>
 - `shell_commands.mode` is `all` or `per-file`.
 - `shell_commands.pattern` values are valid glob patterns.
 - Typo detection via Levenshtein distance (e.g. `ApName` → suggests `AppName`).
+- Every `{{ .Variable }}` used in an injection's `target`, `anchor`, `content`, or `skip_if` is declared in the command's `variables:` (with did-you-mean suggestions).
+- Injection `target`, `anchor`, and `content` are not empty.
+- Injection `position` is `after` or `before`.
+- Injection `on_missing` is `fail` or `skip`.
 
 **Example:**
 ```
@@ -357,6 +391,13 @@ commands:
       - source: path/to/file.tmpl    # relative to template dir; omit for empty file
         destination: path/to/{{ .AppName }}/file  # rendered as a template
         on_conflict: default         # "default" (follows --skip/--force), "skip", or "force"
+    injections:                      # Optional, edits to an existing file after files are written
+      - target: internal/{{ .AppName }}/init.go   # required — existing file to modify (rendered)
+        anchor: "// scaffor:commands"              # required — insert at the FIRST line containing this string (rendered)
+        position: before                           # optional — "after" (default) or "before" the anchor line
+        content: "    clicommands.New{{ .Command | title }}Command(handler),"  # required — inserted verbatim as full lines
+        skip_if: "New{{ .Command | title }}Command(handler)"  # optional — idempotency guard; defaults to checking for rendered content
+        on_missing: fail                           # optional — "fail" (default) or "skip" when target or anchor is missing
     post_commands:
       - other_command_name           # Chain to another command in this template
     shell_commands:                  # Per-command, rendered with this command's variables
@@ -427,3 +468,4 @@ See https://masterminds.github.io/sprig/ for the full function list.
 5. **Follow hints.** After execution, hints tell you exactly what to do next — read them carefully.
 6. **Prefer granular commands.** Many small commands (one `add_entity`, one `add_command`) beat one monolithic generator.
 7. **Use `on_conflict` for idempotency.** Mark editable files as `skip` and fully-generated ones as `force` so re-runs never clobber user work.
+8. **Prefer templates that inject their own wiring.** If a command declares `injections` with a `skip_if` guard, re-running it is safe and you don't need to hand-edit `init.go` or similar registration files yourself — let the template do it deterministically.

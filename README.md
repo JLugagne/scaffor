@@ -33,6 +33,8 @@ Ask your agent to "add a new entity to the hexagonal app". Watch what happens:
 5. It wires the handler in the wrong `init.go`
 6. You re-prompt. It drifts further from the existing style.
 
+scaffor closes step 5 too — deterministically, not by hoping the agent finds the right line.
+
 Every one of those steps costs tokens, time, and context. Multiply by every file in the feature and you see the bill. And the worst part isn't the cost — it's that **the output is non-deterministic**. Two agents, two sessions, two different layouts.
 
 ## The fix
@@ -78,6 +80,25 @@ When the agent no longer has to plan file trees and remember conventions, **the 
 ### 4. Validated before use
 
 Templates are **linted statically** (`scaffor lint`) and **tested end-to-end in a sandbox** (`scaffor test`). Broken templates fail in CI, not in your agent's next turn.
+
+### 5. Deterministic file injection
+
+New files are only half the problem — the other half is wiring them into code that already exists. scaffor commands can declare `injections`: precise, anchor-based edits to an existing file, applied the same way every time.
+
+```yaml
+injections:
+  - target: internal/{{ .AppName }}/init.go
+    anchor: "// scaffor:commands"
+    position: before
+    content: "    clicommands.New{{ .Command | title }}Command(handler),"
+    skip_if: "New{{ .Command | title }}Command(handler)"
+```
+
+The line is inserted at the first occurrence of the anchor, and `skip_if` makes re-runs a no-op instead of a duplicate line. The built-in `hexagonal-cli` template uses exactly this to wire new commands into `rootCmd.AddCommand(...)` — no more "wire the handler in init.go" left for the agent to get wrong:
+
+```
+[injected] internal/myapp/init.go
+```
 
 ---
 
@@ -296,6 +317,7 @@ Use `dry_run: true` when your template's shell_commands require network or exter
 - **Pre-flight checks** abort if any destination file already exists
 - **Per-file overrides** via `on_conflict`: `default` (respects flags), `skip` (always skip), `force` (always overwrite)
 - **Directory traversal** (`..`) in destinations is rejected
+- **Injections only touch declared targets at declared anchors** — traversal (`..`) in an injection target is rejected the same as a destination, every injection event is audited in the session log, and pre-flight aborts if a target is missing (unless `on_missing: skip`)
 - **Session log** at `.scaffor/<session-id>.jsonl` records every file event — auditable supply-chain trail for every generated file
 - **Treat templates like code** — only use sources you trust
 

@@ -17,13 +17,14 @@ type Template struct {
 }
 
 type TemplateCommand struct {
-	Command       string             `yaml:"command"`
-	Description   string             `yaml:"description"`
-	Variables     []TemplateVariable `yaml:"variables"`
-	Files         []TemplateFile     `yaml:"files"`
-	PostCommands  []string           `yaml:"post_commands"`
-	ShellCommands []ShellCommand     `yaml:"shell_commands"`
-	Hint          string             `yaml:"hint"`
+	Command       string              `yaml:"command"`
+	Description   string              `yaml:"description"`
+	Variables     []TemplateVariable  `yaml:"variables"`
+	Files         []TemplateFile      `yaml:"files"`
+	Injections    []TemplateInjection `yaml:"injections"`
+	PostCommands  []string            `yaml:"post_commands"`
+	ShellCommands []ShellCommand      `yaml:"shell_commands"`
+	Hint          string              `yaml:"hint"`
 }
 
 type TemplateVariable struct {
@@ -84,4 +85,30 @@ type TestStep struct {
 	Params  map[string]string `yaml:"params"`
 	// when true, shell_commands are printed but not executed (same as Execute's DryRun)
 	DryRun bool `yaml:"dry_run,omitempty"`
+}
+
+// TemplateInjection describes a deterministic modification of an existing
+// file: Content is inserted as full lines relative to the first line of the
+// target that contains Anchor. Target, Anchor, Content, and SkipIf are
+// rendered as Go templates with the command's variables before use.
+type TemplateInjection struct {
+	// Target is the path of the file to modify, rendered like a destination.
+	Target string `yaml:"target"`
+	// Anchor selects the insertion point: the first line containing this
+	// string (after rendering). Injection fails if no line matches, unless
+	// OnMissing is "skip".
+	Anchor string `yaml:"anchor"`
+	// Position is "after" (default) or "before" the anchor line.
+	Position string `yaml:"position"`
+	// Content is inserted verbatim as full lines; a trailing newline is
+	// ensured. Indentation is the template author's responsibility.
+	Content string `yaml:"content"`
+	// SkipIf is an idempotency guard: when the rendered value is non-empty
+	// and already present in the target, the injection is skipped. When
+	// empty, the injection is skipped if the rendered Content is already
+	// present.
+	SkipIf string `yaml:"skip_if"`
+	// OnMissing is "fail" (default) or "skip": what to do when the target
+	// file does not exist or the anchor is not found.
+	OnMissing string `yaml:"on_missing"`
 }

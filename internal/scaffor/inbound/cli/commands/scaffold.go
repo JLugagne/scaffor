@@ -88,6 +88,20 @@ func printCommandDetail(cmd domain.TemplateCommand) {
 			fmt.Printf("    → %s\n", pc)
 		}
 	}
+	if len(cmd.Injections) > 0 {
+		fmt.Println("\n  Injections:")
+		for _, inj := range cmd.Injections {
+			pos := inj.Position
+			if pos == "" {
+				pos = "after"
+			}
+			line := fmt.Sprintf("    %s (%s anchor: %s)", inj.Target, pos, inj.Anchor)
+			if inj.OnMissing != "" {
+				line += fmt.Sprintf(" [on_missing: %s]", inj.OnMissing)
+			}
+			fmt.Println(line)
+		}
+	}
 	if len(cmd.ShellCommands) > 0 {
 		fmt.Println("\n  Shell commands:")
 		for _, sc := range cmd.ShellCommands {
